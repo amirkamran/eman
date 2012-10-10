@@ -1,34 +1,33 @@
 #!/bin/bash
-# eman seed for compiling srilm
 
-function die() { echo "$@" >&2; exit 1; }
-set -o pipefail  # safer pipes
+# define step's variables
+eman \
+  defvar DATESTEP help='step of type getdate' type=reqstep \
+  defvar DIGITS help='which digits to count' \
+  || exit 1
 
-# Ensure all the required variables are set (or provide the default)
-touch eman.vars # there are no variables
+# load variable values
+eval `eman bash-loadvars`
 
-# Set local bash variables
-#eval `eman bash-loadvars`
+# ask eman for full step path
+DATEPATH=`eman path $DATESTEP`
 
-PLAYGROUND=$(eman path)
+# Stop here if we are just initing ourselves
+[ -z "$INIT_ONLY" ] || exit 0
 
-cat > eman.command << KONEC
+cat << END > eman.command
 #!/bin/bash
+# This is the command to be run here
 echo "=============================="
 echo "== Started:   "\`date '+%Y%m%d-%H%M'\`
 echo "== Hostname:  "\`hostname\`
 echo "== Directory: "\`pwd\`
 echo "=============================="
-mydir=\$(pwd)
-set -o pipefail
-function die() { echo "\$@" >&2 ; eman fail \$mydir ; exit 1 ; }
-renice 10 \$\$
-ulimit -c 1 # core files limited to 1 byte
 
-cp $PLAYGROUND/../src/multeval.tar.gz . \\
-&& tar xzf multeval.tar.gz \\
-&& rm multeval.tar.gz \\
-|| die "Failed to extract Multeval"
+mydir=\$(pwd)
+function die() { echo "\$@" >&2 ; eman fail \$mydir ; exit 1 ; }
+
+cat $DATEPATH/date.out | tr -cd '$DIGITS' | wc -c > digitcount
 
 # Standard command footer
 echo Done.
@@ -38,4 +37,4 @@ echo "== Ended:     "\`date '+%Y%m%d-%H%M'\`
 echo "== Hostname:  "\`hostname\`
 echo "== Directory: "\`pwd\`
 echo "=============================="
-KONEC
+END
