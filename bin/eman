@@ -14,7 +14,7 @@
 use strict;
 use warnings;
 use 5.010;
-use YAML;
+use YAML:XS;
 use File::Temp qw/tempfile/;
 use Carp;
 use Term::ANSIColor;
@@ -131,6 +131,7 @@ my $maindir = undef; # the path of the directory with seeds, steps etc.
                      # guessed using chdir_to_maindir
 
 my $qsub_available = undef;
+my $nolazy = 0; # do not update index by default
 
 # qsub flags we interpret
 my $queue = undef;
@@ -193,6 +194,7 @@ my %options = (
   "limit|l=s@"=>\@limits, # format, e.g.: h_stack=30M
   "hold=s@"=>\@userholds, # format: 123456
   "subdir=s"=>\$subdir,
+  "nolazy|no-lazy!" =>\$nolazy,
 );
 GetOptions(%options) or exit 1;
 
@@ -448,27 +450,29 @@ my $autotag_rules = undef; # to be loaded by load_autotag_rules("eman.autotags")
 # autotag_rules->{steptype} = [ [list of regexes producing one tag],
 #   [list of regexes producing another tag] ]
 
+if (! defined $idx || $nolazy) {
+  print STDERR "Updating index\n" if $debug;
+  foreach my $subdir (@subdirs) {
+    my @steps = glob("$subdir/$dirprefix*.[0-9]*");
+    foreach my $s (@steps) {
+      print STDERR "indexing $s\n" if $debug;
+      next if defined $idx->{basename($s)."path"}; # && defined $idx->{$s."jid"};
+      # now avoiding costly regeneration of metadata
+      # use --reindex if you miss jobids
+      next if ! stepdir_valid($s);
+      add_stepdir_to_index($s);
 
-foreach my $subdir (@subdirs) {
-  my @steps = glob("$subdir/$dirprefix*.[0-9]*");
-  foreach my $s (@steps) {
-    print STDERR "indexing $s\n" if $debug;
-    next if defined $idx->{basename($s)."path"}; # && defined $idx->{$s."jid"};
-                                # now avoiding costly regeneration of metadata
-                                # use --reindex if you miss jobids
-    next if ! stepdir_valid($s);
-    add_stepdir_to_index($s);
+      my $stepname = basename($s);
 
-    my $stepname = basename($s);
-
-    # mark that this step uses its deps
-    my $deps = load_depsarr($stepname);
-    if (defined $deps) {
-      foreach my $d (@$deps) {
-        $idx->{'USED_BY'}->{$d}->{$stepname} = 1;
+      # mark that this step uses its deps
+      my $deps = load_depsarr($stepname);
+      if (defined $deps) {
+        foreach my $d (@$deps) {
+          $idx->{'USED_BY'}->{$d}->{$stepname} = 1;
+        }
       }
+      print STDERR "$stepname: $idx->{$stepname}\n" if $debug;
     }
-    print STDERR "$stepname: $idx->{$stepname}\n" if $debug;
   }
 }
 
