@@ -14,7 +14,7 @@
 use strict;
 use warnings;
 use 5.010;
-use YAML:XS;
+use YAML::XS;
 use File::Temp qw/tempfile/;
 use Carp;
 use Term::ANSIColor;
@@ -852,7 +852,7 @@ if ($cmd eq "clone") {
     print STDERR "Loading recipe from stdin.\n";
     my $recipestr = load("-");
     my $recipe = parse_recipe([split /\n/, $recipestr]);
-    print YAML::Dump($recipe) if $debug;
+    print Dump($recipe) if $debug;
     my $depmap = {};
     my $newtopstep = init_by_recipe($recipe, $depmap);
     $waserror = ! start($newtopstep)
@@ -2322,7 +2322,7 @@ sub saveidx {
   print STDERR "Saving index to $tempname\n" if $debug;
   binmode($h, ":utf8");
   # my $h = my_save($indexfile);
-  print $h YAML::Dump($idx);
+  print $h Dump($idx);
   close $h;
   print STDERR "Moving index from $tempname to $indexfile\n" if $debug;
   rename($tempname, $indexfile)
