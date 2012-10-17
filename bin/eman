@@ -2588,7 +2588,7 @@ sub collect_tokens {
     if ($tokenre =~ /\(/) {
       print STDERR "Token $tokenre MATCHES: @matches\n" if $debug;
       foreach my $m (@matches) {
-        $tokenre =~ s/\([^\(\)]+\)/$m/;
+        $tokenre =~ s/\((?!\?:)[^\(\)]+\)/$m/;
       }
     }
     push @out, (defined $self->{tokenmap}->{$tokenre} ? $self->{tokenmap}->{$tokenre} : $tokenre);
