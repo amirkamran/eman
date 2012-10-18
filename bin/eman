@@ -1331,6 +1331,7 @@ sub init {
     save("eman.status", "INITED");
     mychdir($oldwd);
     add_stepdir_to_index($s); # so that further cloning can use that
+    saveidx($idx);
     print STDERR "Inited: $stepname\n";
   } elsif ($preservedir) {
     print STDERR "Failed to init the step. Check and delete: $stepname\n";
