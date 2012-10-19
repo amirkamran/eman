@@ -1760,8 +1760,9 @@ sub print_log {
 sub traceback_to_recipe {
   # construct a recipe from a traceback
   my $step = shift;
+  my $stepdir = get_stepdir($step);
   mydie "Can't create traceback, $step nonexistent."
-    if ! -e get_stepdir($step);
+    if ! defined $stepdir || ! -e $stepdir;
   my $recipe = { "name" => $step,
                  "vars" => [ split /\n/, load_vars_str($step) ],
                  "deps" => [],
