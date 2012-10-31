@@ -132,6 +132,8 @@ my $maindir = undef; # the path of the directory with seeds, steps etc.
 
 my $qsub_available = undef;
 my $nolazy = 0; # do not update index by default
+my $noremote = 0; # do not list remote steps
+my $showdir = 0; # show directory (alias) for remote steps
 
 # qsub flags we interpret
 my $queue = undef;
@@ -195,6 +197,8 @@ my %options = (
   "hold=s@"=>\@userholds, # format: 123456
   "subdir=s"=>\$subdir,
   "nolazy|no-lazy!" =>\$nolazy,
+  "noremote|no-remote!" =>\$noremote,
+  "dir|show-dir!" =>\$showdir,
 );
 GetOptions(%options) or exit 1;
 
@@ -1709,6 +1713,11 @@ sub list {
       my $users = $idx->{'USED_BY'}->{$s};
       next if defined $users;
     }
+    if ($noremote) {
+       my $steppath = $idx->{$s . "path"};
+       $steppath =~ s/$s//; # remove step name from path
+       next if abs_path($steppath) ne abs_path($maindir);
+    }
     print_short($s);
   }
   my $ok = 1;
@@ -1727,6 +1736,21 @@ sub print_short {
   print "\t", compiled_tag_string($s) if $show_tag;
   print "\t", (load_jobid($s) || "") if $show_jobid;
   print "\t", show_disk_usage($s) if $show_disk_usage;
+  if ($showdir) {
+    my $steppath = $idx->{$s . "path"};
+    $steppath =~ s/\/$s//; # remove step directory
+    if (abs_path($steppath) ne $maindir) {
+      # step is not from around here
+      $steppath =~ s/$maindir\///; # strip playground path
+      if (-l "$maindir/$steppath") {
+        print "\tR ", $steppath;
+      } else {
+        print "\tS ", $steppath;
+      }
+    } else {
+      print "\tL";
+    }
+  }
   print "\n";
   print_vars("  ", $s) if $show_vars;
   print_log("  ", $s) if $show_log;
@@ -3076,7 +3100,7 @@ sub add_remote_playground {
   mydie "$alias already exists" if -e $alias;
   symlink abs_path($dir), $alias;
   open(my $subdirs_hdl, ">>$subdirs_file") or mydie "Cannot open $subdirs_file";
-  print $subdirs_hdl abs_path($alias), "\n";
+  print $subdirs_hdl "$maindir/$alias\n";
   close $subdirs_hdl;
 }
 
