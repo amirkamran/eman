@@ -1,4 +1,4 @@
-#!/usr/bin/perl -CSAD
+#!/usr/bin/env perl
 # eman, experiment manager
 #
 # More info: 'eman --help' or 'eman --man'
@@ -10,6 +10,8 @@
 # BUGS: now already excluding dir self name from hash,
 #       should be also removing the exp's old name before renaming
 #       should include env vars in vars when cloning from scenario
+#       we need to find the equivalent for -CSAD to accept unicode
+#         chars as arguments
 
 use strict;
 use warnings;
