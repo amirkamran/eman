@@ -1619,7 +1619,8 @@ sub submit {
     save("eman.status", "RUNNING"); # set status before starting to avoid race
     # Log the command, too. If we ever need to restart the job we will want to know the original memory+disk requirements.
     # (SGE stores the requirements in the epilog text but the job may die without ever writing the epilog.)
-    my $qsub_command = "qsub -C '' $sgeholdsstr -N $s -o log.o\\\$JOB_ID @opts ./eman.command";
+    my $jobname = shorten_name($s);
+    my $qsub_command = "qsub -C '' $sgeholdsstr -N $jobname -o log.o\\\$JOB_ID @opts ./eman.command";
     open(LOG, '>log') or die("Cannot write log: $!");
     print LOG ("$qsub_command\n");
     close(LOG);
@@ -1653,6 +1654,13 @@ sub submit {
   }
   mychdir($prevdir);
   return $ok;
+}
+
+sub shorten_name {
+  my $s = shift;
+  my ($pref, $type, $hash, $time) = split /\./, $s;
+  $type = substr($type, - min(length $type, 4)); # last 4 characters
+  return "$type.$hash";
 }
 
 sub list_duplicates {
