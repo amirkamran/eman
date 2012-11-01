@@ -3088,15 +3088,15 @@ sub add_dir {
   my $dir = shift;
   mydie "No directory given." if ! $dir;
   if (-e $dir) {
-    mydie "$dir is not a directory" if ! -d $dir;
+    mydie "$dir is not a directory" if ! -d "$maindir/$dir";
   } else {
     mkpath($dir);
-    mydie "Failed to create directory: $dir" if ! -d $dir;
+    mydie "Failed to create directory: $dir" if ! -d "$maindir/$dir";
   }
-  my @current = split /\n/, try_load($subdirs_file);
+  my @current = split /\n/, try_load("$maindir/$subdirs_file");
   $dir = abs_path($dir);
   return if grep { $_ eq $dir } @current; # do not add dirs multiple times
-  open(my $subdirs_hdl, ">>$subdirs_file") or mydie "Cannot open $subdirs_file";
+  open(my $subdirs_hdl, ">>$maindir/$subdirs_file") or mydie "Cannot open $maindir/$subdirs_file";
   print $subdirs_hdl $dir, "\n";
   close $subdirs_hdl;
 }
@@ -3107,9 +3107,13 @@ sub add_remote_playground {
   mydie "Usage: eman addremote DIR ALIAS" if ! $dir || ! $alias;
   mydie "$dir is not a directory" if ! -d $dir;
   mydie "$dir is not an eman playground" if ! -d "$dir/$seedsdir";
-  mydie "$alias already exists" if -e $alias;
-  symlink abs_path($dir), $alias;
-  open(my $subdirs_hdl, ">>$subdirs_file") or mydie "Cannot open $subdirs_file";
+  mydie "$alias already exists" if -e "$maindir/$alias";
+  my @current = split /\n/, try_load("$maindir/$subdirs_file");
+  my $absdir = abs_path($dir);
+  my @identical = grep { abs_path($_) eq $absdir } @current; # do not add dirs multiple times
+  mydie "Remote $identical[0] points to the same location" if defined $identical[0];
+  symlink abs_path($dir), "$maindir/$alias";
+  open(my $subdirs_hdl, ">>$maindir/$subdirs_file") or mydie "Cannot open $maindir/$subdirs_file";
   print $subdirs_hdl "$maindir/$alias\n";
   close $subdirs_hdl;
 }
