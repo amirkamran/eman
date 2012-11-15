@@ -2371,12 +2371,13 @@ sub get_hash_from_dir {
 
   my @vars = split /\n/, load($step."/eman.vars");
   #my @deps = split /\n/, load($step."/eman.deps");
-  return get_hash_from_vars_deps($step, \@vars, undef);
+  return get_hash_from_vars_deps(basename($step), \@vars, undef);
 }
 sub get_hash_from_vars_deps {
   my $name = shift;
   my $vars = shift;
   my $deps = shift;
+  
     # deps are totally ignored, we assume they are implied by vars
   # avoid considering the name of ourselves significant in content check
   my @usevars = @$vars;
