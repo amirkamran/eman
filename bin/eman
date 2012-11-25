@@ -1616,10 +1616,21 @@ sub submit {
     # add all job holds
     push @opts, map {('-hold_jid', $_)} @userholds;
 
+    
+    
+    #check for multi-core support
+    my $vars_hash = load_vars_hash($s);
+    my $cores = $vars_hash->{CORES};
+    if ((defined $cores) && ($cores!=1)) {
+        push @opts, (" -pe smp $cores ");
+    }
+
     save("eman.status", "RUNNING"); # set status before starting to avoid race
     # Log the command, too. If we ever need to restart the job we will want to know the original memory+disk requirements.
     # (SGE stores the requirements in the epilog text but the job may die without ever writing the epilog.)
     my $jobname = shorten_name($s);
+   
+    
     my $qsub_command = "qsub -C '' $sgeholdsstr -N $jobname -o log.o\\\$JOB_ID @opts ./eman.command";
     open(LOG, '>log') or die("Cannot write log: $!");
     print LOG ("$qsub_command\n");
