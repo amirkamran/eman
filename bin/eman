@@ -1977,7 +1977,7 @@ sub get_steptype {
 
 sub load_status {
   my $step = shift;
-  return try_load(absolutize_within_stepdir($step, "eman.status")) || "NONEXISTENT";
+  return try_load(absolutize_within_stepdir($step, "eman.status")) or "NONEXISTENT";
 }
 sub load_tag {
   my $step = shift;
