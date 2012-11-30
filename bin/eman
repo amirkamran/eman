@@ -3437,6 +3437,7 @@ eman.command). The status becomes 'PREPARED'.
 eman.status.
 
 The following statuses are recognized:
+
   NONEXISTENT        ... not created yet / irreversibly deleted
   INITED             ... the step was just created
   INITFAILED         ... the initialization failed
@@ -3504,57 +3505,57 @@ You can use the following filters in eman select:
 
 The result (and speed) depends on the order of filters, e.g.:
 
-eman select t mert l 10 # output last 10 merts
-eman select l 10 t mert # output merts that were among 10 latest steps
+  eman select t mert l 10 # output last 10 merts
+  eman select l 10 t mert # output merts that were among 10 latest steps
 
 
 =head1 USAGE PATTERNS
 
-eman traceback SPEC -s '/.../.../'
+  eman traceback SPEC -s '/.../.../'
   # preview the experiment with some vars replaced
   # append "--colorize | less" to preview
 
-eman traceback SPEC -s '/.../.../' | eman clone
+  eman traceback SPEC -s '/.../.../' | eman clone
   # clone the whole subtree of steps replacing some vars
 
-VAR=x eman redo SPEC
+  VAR=x eman redo SPEC
   # clone the top step (and unusable predecessors) replacing VAR
   # with some new value x
 
-eman abolish `eman select t STEPTYPE f`
+  eman abolish `eman select t STEPTYPE f`
   # remove all content files of all failing steps of a STEPTYPE
 
-eman stat `qstat | cut -c 1-8 | skip 2`
+  eman stat `qstat | cut -c 1-8 | skip 2`
   # show status of all running/held jobs in SGE
   # WARNING: This only works if there are no non-eman cluster jobs.
   # Otherwise, eman will just say "Failed to guess step from: $job_id".
   # the skip command is available here:
   #   http://www.cuni.cz/~obo/textutils/#skip
 
-eman tb --no-tree $(eman sel t EVAL tre FOO) | grep MERT
+  eman tb --no-tree $(eman sel t EVAL tre FOO) | grep MERT
   # list all MERT steps that were used to construct EVAL steps tagged
   # with the tag FOO
 
-eman sel t lm vre tag --stat --vars | grep 'ORDER\|s.lm'
+  eman sel t lm vre tag --stat --vars | grep 'ORDER\|s.lm'
   # what all orders of LM do I have over morphological 'tag's
 
-eman select s RUNNING nq
+  eman select s RUNNING nq
   # which failed jobs failed to fail correctly?
   # eman believes they are still running but cluster does not know them
 
-( for fstep in `eman select f` ; do tb=`eman traceback $fstep --vars` ; alicorp=`echo $tb | perl -pe '$_="" unless(s/.*(ALICORP=\S+).*/$1/)'` ; if echo $alicorp | grep un > /dev/null ; then echo $fstep $alicorp ; fi ; done ) > failed_steps_depending_on_un_corpus.txt
+  ( for fstep in `eman select f` ; do tb=`eman traceback $fstep --vars` ; alicorp=`echo $tb | perl -pe '$_="" unless(s/.*(ALICORP=\S+).*/$1/)'` ; if echo $alicorp | grep un > /dev/null ; then echo $fstep $alicorp ; fi ; done ) > failed_steps_depending_on_un_corpus.txt
   # list all failed steps depending (transitively) on ALICORP=*un* (e.g. un.fr-en or un.es-en)
 
-for x in `eman ls` ; do ev=`eman tf $x | grep s.evaluator` ; if [ -z "$ev" ] ; then echo $x ; fi ; done
+  for x in `eman ls` ; do ev=`eman tf $x | grep s.evaluator` ; if [ -z "$ev" ] ; then echo $x ; fi ; done
   # list all steps whose users (transitive) do not include any evaluator step
-eman select t translate u not t evaluator
+  eman select t translate u not t evaluator
   # list all translate steps whose users (intransitive) do not include any evaluator step
 
-eman ls > steps-all.txt
-eman traceback --no-tree `qstat | grep $USER | grep -P '\ss\.' | cut -d' ' -f1 | grep -v 4296093` | sort -u > steps-tabu.txt
-perl -e 'open(TABU, "steps-tabu.txt") or die; while(<TABU>) { $tabu{$_}++ } open(ALL, "steps-all.txt") or die; while(<ALL>) { print unless($tabu{$_}) }' > steps-free.txt
-for i in `cat steps-free.txt` ; do echo $i ; cp -r $i /net/cluster/TMP/$USER/new_playground ; done
-for i in `cat steps-free.txt` ; do echo $i ; rm -rf $i ; done
+  eman ls > steps-all.txt
+  eman traceback --no-tree `qstat | grep $USER | grep -P '\ss\.' | cut -d' ' -f1 | grep -v 4296093` | sort -u > steps-tabu.txt
+  perl -e 'open(TABU, "steps-tabu.txt") or die; while(<TABU>) { $tabu{$_}++ } open(ALL, "steps-all.txt") or die; while(<ALL>) { print unless($tabu{$_}) }' > steps-free.txt
+  for i in `cat steps-free.txt` ; do echo $i ; cp -r $i /net/cluster/TMP/$USER/new_playground ; done
+  for i in `cat steps-free.txt` ; do echo $i ; rm -rf $i ; done
   # I want to move the playground to another disk because I am hitting the quota.
   # But I need to know first which steps are running or prerequisities of something running (immovable at the moment).
   # Note the "grep -v 4296093" above. Eman will die if any of the running jobs don't match a known step.
