@@ -2935,6 +2935,12 @@ sub filter_steps
             when ("d") { @steps = grep { load_status($_) eq 'DONE' } @steps; }
             # Only FAILED steps.
             when ("f") { @steps = grep { load_status($_) eq 'FAILED' } @steps; }
+            # Only INITED steps.
+            when ("i") { @steps = grep { load_status($_) eq 'INITED' } @steps; }
+            # Only PREPARED steps.
+            when ("p") { @steps = grep { load_status($_) eq 'PREPARED' } @steps; }
+            # Only RUNNING steps.
+            when ("r") { @steps = grep { load_status($_) eq 'RUNNING' } @steps; }
             # Only last n steps (order defined by compare_steps() called above).
             # (In fact it is the reversed order because we take the first n elements of the array.)
             when ("l")
@@ -3295,7 +3301,7 @@ eman, experiment manager
 =head1 SYNOPSIS
 
   VAR=val eman init STEPTYPE # create new step of the given type
-  VAR=val eman clone SPEC    # create new step based on STEPDIR
+  VAR=val eman clone SPEC    # create new step based on SPEC
 
   eman clone < traceback     # create step by cloning incl. predecessors
   eman redo SPEC             # equals 'eman tb --vars SPEC | eman clone'
@@ -3327,10 +3333,14 @@ eman, experiment manager
   eman tag SPEC/STEPTYPE     # like 'list --tag'
   eman users SPEC ...        # list all steps that use the given step
   eman traceback SPEC ...    # show tree of the steps and predecessors
-    -s /foo/bar/             #   and modify vars; can be repeated
+    --tag --vars --status    #   include extra information
+                             #   tracebacks with --vars fully specify
+                             #   the experiment
+    -s /foo/bar/             #   modify vars; can be repeated
                              #   implies --vars
                              #   highlights diff if to terminal
-  eman traceforward SPEC ... # show tree of the steps and successors
+    --ignore STEPTYPE        #   do not include STEPTYPE in traceback
+  eman traceforward SPEC ... # show tree of the steps and users (successors)
   eman duplicates            # show groups of 2+ steps having same vars
     --tag --vars --status    #   include relevant information
     --log --jobid            #   and the tail of the log or SGE job ID
@@ -3341,7 +3351,7 @@ eman, experiment manager
   eman reindex               # re-create index of steps
 
   eman wait SPEC ...         # block until the jobs are FAILED or DONE
-                             # die if FAILED nor DONE is reachable
+                             # die if FAILED or DONE is not reachable
 
   eman select QUERY          # output steps matching the QUERY;
                              #   query syntax is documented below
@@ -3350,11 +3360,32 @@ eman, experiment manager
                              # you can use remote steps, clone them etc.
   eman adddir DIR            # add a subdirectory for steps
 
-SPEC is a text snippet capable of identifying a step uniquely.
-You can even use '.' and '`pwd`' as SPEC.
-Commands marked with '#' are not yet implemented.
+SPEC is a text snippet capable of identifying a step uniquely, such as
+'s.align.12345678.20121010-1010'. You can even use '.' and '`pwd`' as SPEC.
+
+STEPTYPE specifies the seed to be used, e.g. 'align'.
 
 =head1 DESCRIPTION
+
+Command aliases:
+
+  abolish      rm 
+  clone        cl 
+  continue     cont  
+  duplicates   dups 
+  list         ls 
+  prepare      pr 
+  prepare      prep 
+  retag        retag 
+  select       sel 
+  start        st 
+  status       stat 
+  tabulate     tab 
+  traceback    tb 
+  traceback    tr 
+  traceforward tf 
+  traceforward traceusers 
+  traceforward tu 
 
 Eman is an experiment manager, useful mainly for deriving steps and
 step chains, i.e. complex experiment scenarios.
@@ -3375,8 +3406,6 @@ explored experiment configurations while maintaining the reproducibility of all
 the various experiment runs. The specific subject of your experiments is not
 important for eman---all commands to run etc. are encoded in your custom
 'seeds'.
-
-
 
 =head2 Structure of a Step Directory
 
@@ -3506,7 +3535,8 @@ You can use the following filters in eman select:
   s <status>       ... only steps with status <status>
   v <VAR>=<value>  ... only steps with variable <VAR> that
                        has value <value>
-  vre <regex>      ... only steps where the variable file matches <regex>
+  vre <regex>      ... only steps where the variable matches <regex>
+                       (the expression can contain the name of the variable)
   tre <regex>      ... only steps where tags (incl. autotags) match <regex>
   nq               ... only steps not currently known to qstat
                        (current user, any cluster job status)
@@ -3514,11 +3544,16 @@ You can use the following filters in eman select:
                        properties; rest of query defines the user
   u not <criteria> ... only steps that have no users with given properties
 
-The result (and speed) depends on the order of filters, e.g.:
+Examples:
 
+  eman sel t mert d                        # MERT steps that are DONE
+  eman sel lh                              # last 10 steps
+  eman sel t tm v DECODINGSTEPS=t0-0       # tm steps with one 1-factor t-step
+  eman sel t tm vre '^DECODINGSTEPS=t0-0$' # equvivalent to the above
+
+  # The result (and speed) depends on the order of filters, e.g.:
   eman select t mert l 10 # output last 10 merts
   eman select l 10 t mert # output merts that were among 10 latest steps
-
 
 =head1 USAGE PATTERNS
 
@@ -3554,24 +3589,46 @@ The result (and speed) depends on the order of filters, e.g.:
   # which failed jobs failed to fail correctly?
   # eman believes they are still running but cluster does not know them
 
-  ( for fstep in `eman select f` ; do tb=`eman traceback $fstep --vars` ; alicorp=`echo $tb | perl -pe '$_="" unless(s/.*(ALICORP=\S+).*/$1/)'` ; if echo $alicorp | grep un > /dev/null ; then echo $fstep $alicorp ; fi ; done ) > failed_steps_depending_on_un_corpus.txt
-  # list all failed steps depending (transitively) on ALICORP=*un* (e.g. un.fr-en or un.es-en)
+  ( for fstep in `eman select f` ; do
+    tb=`eman traceback $fstep --vars` ;
+    alicorp=`echo $tb | perl -pe '$_="" unless(s/.*(ALICORP=\S+).*/$1/)'` ;
+    if echo $alicorp | grep un > /dev/null ; then
+      echo $fstep $alicorp ;
+    fi ;
+  done ) > failed_steps_depending_on_un_corpus.txt
+  # list all failed steps depending (transitively) on ALICORP=*un*
+  # (e.g. un.fr-en or un.es-en)
 
-  for x in `eman ls` ; do ev=`eman tf $x | grep s.evaluator` ; if [ -z "$ev" ] ; then echo $x ; fi ; done
+  for x in `eman ls` ; do
+    ev=`eman tf $x | grep s.evaluator`
+    if [ -z "$ev" ] ; then echo $x ; fi
+  done
   # list all steps whose users (transitive) do not include any evaluator step
+
   eman select t translate u not t evaluator
-  # list all translate steps whose users (intransitive) do not include any evaluator step
+  # list all translate steps whose users (intransitive) do not include any
+  # evaluator step
 
   eman ls > steps-all.txt
-  eman traceback --no-tree `qstat | grep $USER | grep -P '\ss\.' | cut -d' ' -f1 | grep -v 4296093` | sort -u > steps-tabu.txt
-  perl -e 'open(TABU, "steps-tabu.txt") or die; while(<TABU>) { $tabu{$_}++ } open(ALL, "steps-all.txt") or die; while(<ALL>) { print unless($tabu{$_}) }' > steps-free.txt
-  for i in `cat steps-free.txt` ; do echo $i ; cp -r $i /net/cluster/TMP/$USER/new_playground ; done
+  eman traceback --no-tree \
+    `qstat | grep $USER | grep -P '\ss\.' | cut -d' ' -f1 | grep -v 4296093` \
+    | sort -u > steps-tabu.txt
+  perl -e '
+    open(TABU, "steps-tabu.txt") or die;
+    while(<TABU>) { $tabu{$_}++ }
+    open(ALL, "steps-all.txt") or die;
+    while(<ALL>) { print unless($tabu{$_}) }' > steps-free.txt
+  for i in `cat steps-free.txt` ; do
+    echo $i ; cp -r $i /net/cluster/TMP/$USER/new_playground 
+  done
   for i in `cat steps-free.txt` ; do echo $i ; rm -rf $i ; done
-  # I want to move the playground to another disk because I am hitting the quota.
-  # But I need to know first which steps are running or prerequisities of something running (immovable at the moment).
-  # Note the "grep -v 4296093" above. Eman will die if any of the running jobs don't match a known step.
-  # (BEWARE: Copying steps will also separate numerous hardlinks we have there. The target disk usage will be much higher
-  # until we rejoin the hardlinks again or erase them.)
+  # I want to move the playground to another disk because I am hitting the
+  # quota. But I need to know first which steps are running or prerequisities 
+  # of something running (immovable at the moment). Note the "grep -v 4296093" 
+  # above. Eman will die if any of the running jobs don't match a known step.
+  # (BEWARE: Copying steps will also separate numerous hardlinks we have there. 
+  # The target disk usage will be much higher until we rejoin the hardlinks
+  # again or erase them.)
 
 =head2 If a Cluster Node Completely Dies
 
@@ -3585,7 +3642,8 @@ is probably what you want to do:
 # or:
   eman continue 2472256 --mem 20g      # re-run it with more memory
     # eman redo will clone the failed step (and reuse steps it depends on)
-    # eman continue will rerun the original step instead (run eman.command without generating it anew)
+    # eman continue will rerun the original step instead (run eman.command
+    # without generating it anew)
 
 =head1 COMMON PROBLEMS
 
@@ -3601,7 +3659,8 @@ The step may indeed be a zombie, a removed directory.
 =head2 Multiple Step Instances, Some Failed, Some OK
 
 By cloning, you can easily end up with several instances of the same step (i.e.
-two distinct step directories with identical variables). Sometimes, some of the instances may be even failed and some may be finished successfully.
+two distinct step directories with identical variables). Sometimes, some of the
+instances may be even failed and some may be finished successfully.
 
 When such a step is
 further used in an experiment, and you clone the experiment, eman will
@@ -3611,7 +3670,8 @@ instances are not considered plausible).
 To pick a specific instance of a step manually (including implausible
 instances), use --reuse. To avoid some instances, use --avoid.
 
-You may wish to use 'eman dups' every now and then to get rid (or abolish) some of the unused instances.
+You may wish to use 'eman dups' every now and then to get rid (or abolish) some
+of the unused instances.
 
 
 =head1 WRITING SEEDS: CORE CONVENTIONS
