@@ -1588,21 +1588,21 @@ sub submit {
     push @opts, ("-S", "/bin/bash");
     push @opts, ("-p", $priority);
     # interpret SGE options
-    my $real_queue = $vars_hash->{EMAN_QUEUE} // $queue;
+    my $real_queue = $queue // $vars_hash->{EMAN_QUEUE};
     if (defined $real_queue) {
       push @opts, ("-q", $real_queue);
     }
-    my $real_exclude_comp = $vars_hash->{EMAN_EXCLUDECOMP} // $exclude_comp;
+    my $real_exclude_comp = $exclude_comp // $vars_hash->{EMAN_EXCLUDECOMP};
     if (defined ($real_exclude_comp)) {
       die "Cannot use --queue and --exclude-comp at the same time"
         if defined $real_queue;
       push @opts, ("-q", "*@*&!$real_exclude_comp");
     }
-    my $real_time = $vars_hash->{EMAN_TIME} // $time;
+    my $real_time = $time // $vars_hash->{EMAN_TIME};
     if (defined $real_time) {
       push @opts, ('-l', "h_rt=".$real_time);
     }
-    my $real_mem = $vars_hash->{EMAN_MEM} // $mem;
+    my $real_mem = $mem // $vars_hash->{EMAN_MEM};
     if (defined $real_mem && $real_mem ne "") {
       if ($env eq "rwth") {
         push @opts, ('-l', "h_vmem=".$real_mem);
@@ -1612,7 +1612,7 @@ sub submit {
         push @opts, ('-hard', '-l', "h_vmem=".$real_mem);
       }
     }
-    my $real_disk = $vars_hash->{EMAN_DISK} // $disk;
+    my $real_disk = $disk // $vars_hash->{EMAN_DISK};
     if (defined $real_disk) {
       if ($env eq "rwth") {
         die "Unsupported --disk at rwth.";
@@ -1629,7 +1629,7 @@ sub submit {
     
     
     #check for multi-core support
-    my $real_cores = $vars_hash->{EMAN_CORES} // $cores;
+    my $real_cores = $cores // $vars_hash->{EMAN_CORES};
     if ((defined $real_cores) && ($real_cores!=1)) {
         push @opts, (" -pe smp $real_cores ");
     }
