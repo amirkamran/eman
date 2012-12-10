@@ -3646,7 +3646,8 @@ is probably what you want to do:
   eman continue 2472256 --mem 20g      # re-run it with more memory
     # eman redo will clone the failed step (and reuse steps it depends on)
     # eman continue will rerun the original step instead (run eman.command
-    # without generating it anew)
+    # without generating it anew); note that running users of the step cannot
+    # be saved like this (run eman redo on the last step afterwards)
 
 =head1 COMMON PROBLEMS
 
