@@ -75,6 +75,7 @@ my %expand_abbrev = qw(
   addremote add-remote
   path path
   getvar get-var
+  mkbln make-backlinks
 );
 # all expanded names are also allowed:
 foreach my $val (values %expand_abbrev) {
@@ -609,11 +610,21 @@ if ($cmd eq "users") {
 
 if ($cmd eq "traceforward") {
   $lock->unlock() if defined $lock;
-  mydie "usage: eman traceusers SPEC ..." if 0 == scalar @ARGV;
+  mydie "usage: eman traceforward SPEC ..." if 0 == scalar @ARGV;
   foreach my $key (@ARGV) {
     my $step = guess_step($key);
 #    my $users = $idx->{'USED_BY'}->{$step};
     traceforward("", $step);
+  }
+  exit 0;
+}
+
+if ($cmd eq "make-backlinks") {
+  $lock->unlock() if defined $lock;
+  mydie "usage: eman make-backlinks SPEC ..." if 0 == scalar @ARGV;
+  foreach my $key (@ARGV) {
+    my $step = guess_step($key);
+    mk_backlinks($step);
   }
   exit 0;
 }
@@ -1860,6 +1871,28 @@ sub traceback {
   return if !$recurse;
   foreach my $dep (@$deps) {
     traceback($prefix.$indent, $dep);
+  }
+}
+
+sub mk_backlinks {
+  my $step = shift;
+
+  return if $avoid{$step} || $ignore{$step};
+    # explicit avoiding of individual steps
+  return if $ignore{get_steptype($step)}; # avoiding steps of a given type
+
+  my $indent = $show_tree_in_traceback ? "+- " : "";
+  my $deps = load_depsarr($step);
+  foreach my $dep (@$deps) {
+    my $depdir = get_stepdir($dep);
+    print STDERR "In $step adding symlink to $depdir\n" if $verbose;
+    chdir_to_stepdir($step); # the recursion changes the dirs...
+    my $success;
+    my $symlink_created = eval { $success = symlink($depdir, $dep); 1; };
+      # the eval trick is said to catch exceptions on non-symlinking systems
+    print STDERR "Failed to symlink $dep from $step.\n"
+      if !$success || !$symlink_created;
+    mk_backlinks($dep);
   }
 }
 
