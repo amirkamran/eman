@@ -2030,7 +2030,10 @@ sub get_steptype {
 
 sub load_status {
   my $step = shift;
-  return try_load(absolutize_within_stepdir($step, "eman.status")) or "NONEXISTENT";
+  my $status = try_load(absolutize_within_stepdir($step, "eman.status"));
+  ###!!! For some reason, adding 'or "NONEXISTENT"' directly to the above line did not work.
+  $status = "NONEXISTENT" if(!defined($status));
+  return $status;
 }
 sub load_tag {
   my $step = shift;
