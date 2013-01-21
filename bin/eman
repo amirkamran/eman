@@ -2289,7 +2289,9 @@ sub guess_step_from_hashdate {
 
 sub qstat {
   # Call the SGE's command qstat and in its output, try to replace job names by step names.
+  # Rely on one particular qstat output format (probably not granted on other platforms/versions).
   open(QSTAT, 'qstat |') or die("Cannot pipe from qstat: $!");
+  my @fieldnames = ('jobid', 'prior', 'name', 'user', 's', 'date', 'time', 'machine', 'tags');
   my @rows;
   while(<QSTAT>)
   {
@@ -2302,28 +2304,27 @@ sub qstat {
           splice(@fields, 7, 0, '') if($fields[7] =~ m/^\d+$/);
           push(@rows, \@fields);
       }
-      else
-      {
-          print;
-      }
   }
   close(QSTAT);
   # Guess step names and figure out column widths.
-  my @lengths;
+  my @lengths = map {length($_)} (@fieldnames);
   foreach my $row (@rows)
   {
-      if($row->[2] =~ m/^s\./)
+      # Try to guess the step name. (Will do no harm if the job does not have to do with eman.)
+      if(eval { guess_step($row->[0]) })
       {
-          # The name of the job looks like it is a step-job. Try to guess the step name.
-          if(eval { guess_step($row->[0]) })
+          $row->[2] = guess_step($row->[0]);
+          # Replacing the 'slots' column provided by qstat:
+          $row->[8] = compiled_tag_string($row->[2]);
+          if(length($row->[8])>80)
           {
-              $row->[2] = guess_step($row->[0]);
-              $row->[9] = compiled_tag_string($row->[2]);
-              if(length($row->[9])>80)
-              {
-                  $row->[9] = substr($row->[9], 0, 77).'...';
-              }
+              $row->[8] = substr($row->[8], 0, 77).'...';
           }
+      }
+      # Change the date format so we know for sure what is month and day.
+      if($row->[5] =~ m-(\d+)/(\d+)/(\d+)-)
+      {
+          $row->[5] = "$3-$1-$2";
       }
       # Queue names are unnecessarily long. Convert them to machine names.
       if($row->[7] =~ m/^all.q@([a-z0-9]+)\.ufal\.hide/)
@@ -2340,6 +2341,18 @@ sub qstat {
       }
   }
   # Print the table.
+  for(my $i = 0; $i<=$#fieldnames; $i++)
+  {
+      $fieldnames[$i] = '' if(!defined($fieldnames[$i]));
+      print($fieldnames[$i]);
+      print(' ' x ($lengths[$i]-length($fieldnames[$i])));
+      print($i==$#fieldnames ? "\n" : ' ');
+  }
+  for(my $i = 0; $i<=$#fieldnames; $i++)
+  {
+      print('-' x $lengths[$i]);
+      print($i==$#fieldnames ? "\n" : '-');
+  }
   foreach my $row (@rows)
   {
       my @fields = @{$row};
