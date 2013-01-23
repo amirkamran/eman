@@ -1002,6 +1002,7 @@ sub collect {
       # emit all obtained scores
       foreach my $k (keys %$name_to_res) {
         my $res = $name_to_res->{$k};
+        $res = '' if(!defined($res));
         if (defined $got->{$step}->{$k} && $got->{$step}->{$k} ne $res) {
           print STDERR "$f:Conflicting result for $k:"
             ." $res vs. previous $got->{$step}->{$k}\n";
