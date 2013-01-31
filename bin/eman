@@ -2486,6 +2486,12 @@ sub all_steps {
   return keys %steps_to_list;
 }
 
+sub get_step_date {
+  my $step = shift;
+  $step =~ s/.*\.([^\/]*)-.*/$1/;
+  return $step;
+}
+
 # compare steps by timestamp
 sub compare_steps {
   my ( $first, $second ) = @_;
@@ -3131,6 +3137,16 @@ sub filter_steps
               guess_maindir();
               @steps = grep { ! -d "$maindir/$_" } @steps;
             }
+            when ("date")
+            {
+              my $date = get_eman_select_arg(\@args);
+              @steps = grep { $date == get_step_date($_) } @steps;
+            }
+            when ("today")
+            {
+              my $today = `date '+%Y%m%d'`;
+              @steps = grep { get_step_date($_) == $today } @steps;
+            }
             # Unknown filter command.
             default
             {
@@ -3152,7 +3168,7 @@ sub select_steps {
     # all_steps() could have returned also NONEXISTENT steps (missing folder but the step mentioned as a dependency of another step).
     # list() will die on NONEXISTENT steps ("Failed to guess step from: s...")
     # Thus remove NONEXISTENT steps now.
-    @steps = grep { -d get_stepdir($_) } @steps;
+    @steps = grep { defined get_stepdir($_) } @steps;
     if (!scalar @steps) {
         return 1;
     }
