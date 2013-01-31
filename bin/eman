@@ -3623,6 +3623,10 @@ You can use the following filters in eman select:
   u not <criteria> ... only steps that have no users with given properties
   not              ... negation of the remaining filters
                        e.g. eman select not d
+  local            ... only local steps
+  remote           ... only remote steps
+  date <date>      ... only steps created on <date> (yyyymmdd)
+  today            ... only steps created today
 
 Examples:
 
