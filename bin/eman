@@ -1888,11 +1888,13 @@ sub mk_backlinks {
     my $depdir = get_stepdir($dep);
     print STDERR "In $step adding symlink to $depdir\n" if $verbose;
     chdir_to_stepdir($step); # the recursion changes the dirs...
-    my $success;
-    my $symlink_created = eval { $success = symlink($depdir, $dep); 1; };
-      # the eval trick is said to catch exceptions on non-symlinking systems
-    print STDERR "Failed to symlink $dep from $step.\n"
-      if !$success || !$symlink_created;
+    if (! -l $dep) {
+      my $success;
+      my $symlink_created = eval { $success = symlink($depdir, $dep); 1; };
+        # the eval trick is said to catch exceptions on non-symlinking systems
+      print STDERR "Failed to symlink $dep from $step.\n"
+        if !$success || !$symlink_created;
+    }
     mk_backlinks($dep);
   }
 }
