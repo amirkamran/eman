@@ -2982,6 +2982,7 @@ sub filter_steps
 {
     my $steps = shift; # array reference
     my @steps = sort { compare_steps($a, $b) } @{$steps};
+    print STDERR "Filtering ", join(" ", @steps), "\n" if $debug;
     my @args = @_;
     # Filter without arguments returns all input steps.
     while (@args)
@@ -3139,15 +3140,40 @@ sub filter_steps
               guess_maindir();
               @steps = grep { ! -d "$maindir/$_" } @steps;
             }
+            # only steps created on given date (YYYYMMDD)
             when ("date")
             {
               my $date = get_eman_select_arg(\@args);
               @steps = grep { $date == get_step_date($_) } @steps;
             }
+            # steps created today
             when ("today")
             {
               my $today = `date '+%Y%m%d'`;
               @steps = grep { get_step_date($_) == $today } @steps;
+            }
+            # backward recursion: steps which have a predecessor with given
+            # properties
+            when ("br")
+            {
+              # generator function provides step dependencies
+              @steps = grep {   
+                recfilter($_, sub { filter_steps($_[0], @args) }, \&load_depsarr)
+              } @steps;
+              splice @args;
+            }
+            # forward recursion: steps which have a successor with given
+            # properties
+            when ("fr")
+            {
+              # generator function provides step users
+              @steps = grep {
+                recfilter(
+                  $_,
+                  sub { return filter_steps($_[0], @args); },
+                  sub { return [ keys %{ $idx->{'USED_BY'}->{$_[0]} } ]; })
+              } @steps;
+              splice @args;
             }
             # Unknown filter command.
             default
@@ -3157,10 +3183,22 @@ sub filter_steps
             }
         }
     }
+    print STDERR "Survived: ", join(" ", @steps), "\n" if $debug;
     return @steps;
 }
 
+# given a step, a filter function and a function to generate new steps
+# (e.g. step dependencies or users), return 1 if any of the generated steps
+# (recursively) satisfes the filter
+sub recfilter {
+  my $step = shift;
+  my $filter = shift;
+  my $generator = shift;
 
+  my $generated = $generator->($step) // [];
+  return $filter->($generated) ||
+    grep { recfilter($_, $filter, $generator) } @$generated;
+}
 
 sub select_steps {
   my @args = @_;
@@ -3172,15 +3210,13 @@ sub select_steps {
     # Thus remove NONEXISTENT steps now.
     @steps = grep { defined get_stepdir($_) } @steps;
     if (!scalar @steps) {
-        return 1;
+      return 1;
     }
     return list([@steps]);
   } else {
     return 1;
   }
 }
-
-
 
 sub do_outdate {
   my $step = shift;
@@ -3626,6 +3662,10 @@ You can use the following filters in eman select:
   u <criteria>     ... only steps that have at least one user with given
                        properties; rest of query defines the user
   u not <criteria> ... only steps that have no users with given properties
+  br <criteria>    ... only steps that have at least one (transitive) predecessor 
+                       with given properties (backward recursion)
+  fr <criteria>    ... only steps that have at least one (transitive) successor
+                       with given properties (forward recursion)
   not              ... negation of the remaining filters
                        e.g. eman select not d
   local            ... only local steps
@@ -3639,6 +3679,8 @@ Examples:
   eman sel lh                              # last 10 steps
   eman sel t tm v DECODINGSTEPS=t0-0       # tm steps with one 1-factor t-step
   eman sel t tm vre '^DECODINGSTEPS=t0-0$' # equvivalent to the above
+  eman sel t mert br vre 'ALIAUG.*lcstem4' # MERT steps where word alignment
+                                           # was done on lcstem4
 
   # The result (and speed) depends on the order of filters, e.g.:
   eman select t mert l 10 # output last 10 merts
