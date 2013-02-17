@@ -3158,7 +3158,10 @@ sub filter_steps
             {
               # generator function provides step dependencies
               @steps = grep {   
-                recfilter($_, sub { filter_steps($_[0], @args) }, \&load_depsarr)
+                recfilter(
+                  $_,
+                  sub { return filter_steps($_[0], @args) },
+                  \&load_depsarr)
               } @steps;
               splice @args;
             }
