@@ -3610,6 +3610,9 @@ You can use the following filters in eman select:
   lh               ... latest 10 steps
   d                ... only DONE steps
   f                ... only FAILED steps
+  r                ... only RUNNING steps
+  p                ... only PREPARED steps
+  i                ... only INITED steps
   s <status>       ... only steps with status <status>
   v <VAR>=<value>  ... only steps with variable <VAR> that
                        has value <value>
