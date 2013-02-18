@@ -138,12 +138,17 @@ my $nolazy = 0; # do not update index by default
 my $noremote = 0; # do not list remote steps
 my $showdir = 0; # show directory (alias) for remote steps
 
+my %qsub_defaults = (
+  mem => "6g", # memory requirements
+  cores => 1,  # cpu cores
+);
+
 # qsub flags we interpret
 my $queue = undef;
 my $priority = -100; # use a lower priority by default
 my $exclude_comp = undef; # exclude a single computer
-my $mem = "6g"; # memory requirements
-my $cores = 1;
+my $mem = undef;
+my $cores = undef;
 my $disk = undef; # informative temp disk requirements
 my $time = undef; # time limit
 my @limits = ();  # other custom limits
@@ -1592,7 +1597,8 @@ sub submit {
       if 0 < scalar @plainholds;
 
     my $vars_hash = load_vars_hash($s);
-    
+    # include environment vars
+    map { $vars_hash->{$_} = $ENV{$_} } grep { $_ =~ m/^EMAN_/ } keys %ENV;
 
     my @opts = ("-hard");
     push @opts, ("-j", "y");
@@ -1614,7 +1620,7 @@ sub submit {
     if (defined $real_time) {
       push @opts, ('-l', "h_rt=".$real_time);
     }
-    my $real_mem = $mem // $vars_hash->{EMAN_MEM};
+    my $real_mem = $mem // $vars_hash->{EMAN_MEM} // $qsub_defaults{mem};
     if (defined $real_mem && $real_mem ne "") {
       if ($env eq "rwth") {
         push @opts, ('-l', "h_vmem=".$real_mem);
@@ -1641,7 +1647,7 @@ sub submit {
     
     
     #check for multi-core support
-    my $real_cores = $cores // $vars_hash->{EMAN_CORES};
+    my $real_cores = $cores // $vars_hash->{EMAN_CORES} // $qsub_defaults{cores};
     if ((defined $real_cores) && ($real_cores!=1)) {
         push @opts, (" -pe smp $real_cores ");
     }
