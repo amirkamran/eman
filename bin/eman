@@ -135,7 +135,7 @@ my $maindir = undef; # the path of the directory with seeds, steps etc.
 
 my $qsub_available = undef;
 my $nolazy = 0; # do not update index by default
-my $noremote = 0; # do not list remote steps
+my $remote = 0; # do not list remote steps by default
 my $showdir = 0; # show directory (alias) for remote steps
 
 my %qsub_defaults = (
@@ -207,7 +207,7 @@ my %options = (
   "hold=s@"=>\@userholds, # format: 123456
   "subdir=s"=>\$subdir,
   "nolazy|no-lazy!" =>\$nolazy,
-  "noremote|no-remote!" =>\$noremote,
+  "remote!" =>\$remote,
   "dir|show-dir!" =>\$showdir,
 );
 GetOptions(%options) or exit 1;
@@ -1761,7 +1761,8 @@ sub list {
       my $users = $idx->{'USED_BY'}->{$s};
       next if defined $users;
     }
-    if ($noremote) {
+    if (! $remote) {
+       # do not list remote steps by default
        my $steppath = $idx->{$s . "path"};
        $steppath =~ s/$s//; # remove step name from path
        next if abs_path($steppath) ne abs_path($maindir);
