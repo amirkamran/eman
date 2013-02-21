@@ -467,6 +467,8 @@ my $autotag_rules = undef; # to be loaded by load_autotag_rules("eman.autotags")
 if (! defined $idx || $nolazy) {
   print STDERR "Updating index\n" if $debug;
   foreach my $subdir (@subdirs) {
+    print STDERR "Warning: remote playground '$subdir' does not exist.\n"
+      if ! -e $subdir;
     my @steps = glob("$subdir/$dirprefix*.[0-9]*");
     foreach my $s (@steps) {
       print STDERR "indexing $s\n" if $debug;
