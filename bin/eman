@@ -1787,21 +1787,7 @@ sub print_short {
   print "\t", compiled_tag_string($s) if $show_tag;
   print "\t", (load_jobid($s) || "") if $show_jobid;
   print "\t", show_disk_usage($s) if $show_disk_usage;
-  if ($showdir) {
-    my $steppath = $idx->{$s . "path"};
-    $steppath =~ s/\/$s//; # remove step directory
-    if (abs_path($steppath) ne $maindir) {
-      # step is not from around here
-      $steppath =~ s/$maindir\///; # strip playground path
-      if (-l "$maindir/$steppath") {
-        print "\tR ", $steppath;
-      } else {
-        print "\tS ", $steppath;
-      }
-    } else {
-      print "\tL";
-    }
-  }
+  print "\t", show_dir($s) if $showdir;
   print "\n";
   print_vars("  ", $s) if $show_vars;
   print_log("  ", $s) if $show_log;
@@ -1864,6 +1850,7 @@ sub traceback {
     push @kws, $jid if defined $jid && $jid ne "-";
   }
   push @kws, load_status($step) || "" if $show_status;
+  push @kws, show_dir($step) || "" if $showdir;
   push @kws, compiled_tag_string($step) || "" if $show_tag;
   $indent = $show_tree_in_traceback ? "|  | " : "";
   print $prefix.$indent."Job: @kws\n" if 0 < scalar @kws;
@@ -2130,6 +2117,26 @@ sub show_disk_usage {
   my $du = `du -sh $step 2>/dev/null | cut -f1`;
   chomp $du;
   return $du;
+}
+sub show_dir {
+  my $s = shift;
+  my $steppath = $idx->{$s . "path"};
+  if (!defined $steppath) {
+    print STDERR "Warning: $s not know (local?). Please reindex.\n";
+    return "L?";
+  }
+  $steppath =~ s/\/$s//; # remove step directory
+  if (abs_path($steppath) ne $maindir) {
+    # step is not from around here
+    $steppath =~ s/$maindir\///; # strip playground path
+    if (-l "$maindir/$steppath") {
+      return "R/".$steppath;
+    } else {
+      return "S/".$steppath;
+    }
+  } else {
+    return "L";
+  }
 }
 
 sub canon_stepdir {
