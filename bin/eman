@@ -52,6 +52,7 @@ my %expand_abbrev = qw(
   stat status
   tag tag
   vars vars
+  deps deps
   init init
   run run
   cont continue
@@ -579,6 +580,18 @@ if ($cmd eq "vars") {
   } else {
     $waserror = !list([@ARGV]);
     exit $waserror;
+  }
+}
+
+if ($cmd eq "deps") {
+  $lock->unlock() if defined $lock;
+  for my $spec (@ARGV) {
+    my $step = guess_step($spec);
+    my @deps = split "\n", 
+      try_load(absolutize_within_stepdir($step, "eman.deps"));
+    for my $dep (@deps) {
+      print_short($dep);
+    }
   }
 }
 
