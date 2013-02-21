@@ -1744,6 +1744,7 @@ sub list {
   # listing steps of the given types
   my $only_some_steptypes = 0;
   my %requested_steptype;
+  my %requested_by_spec;
   if (0 < scalar @$args) {
     $only_some_steptypes = 1;
     %requested_steptype = map { ($_, 1) } @$args;
@@ -1765,6 +1766,7 @@ sub list {
       if (defined $guess) {
         # this was not a steptype but a specific experiment
         $steps_to_list{$guess} = 1;
+        $requested_by_spec{$guess} = 1;
       } else {
         push @not_found, $req;
       }
@@ -1776,11 +1778,19 @@ sub list {
       my $users = $idx->{'USED_BY'}->{$s};
       next if defined $users;
     }
-    if (! $remote) {
-       # do not list remote steps by default
-       my $steppath = $idx->{$s . "path"};
-       $steppath =~ s/$s//; # remove step name from path
-       next if abs_path($steppath) ne abs_path($maindir);
+
+    # filter out remote steps, unless:
+    # 1) --remote was specified, or
+    # 2) the user asked for a particular step (e.g. eman stat s.srilm.123)
+    #
+    # XXX hack: eman select calls list() with fully specified step names,
+    # so we filter remote steps even when they are fully specified *if*
+    # the command was "eman select"
+    if (! $remote && ($cmd eq "select" || ! $requested_by_spec{$s})) {
+      # do not list remote steps by default
+      my $steppath = $idx->{$s . "path"};
+      $steppath =~ s/$s//; # remove step name from path
+      next if abs_path($steppath) ne abs_path($maindir);
     }
     print_short($s);
   }
@@ -3157,17 +3167,12 @@ sub filter_steps
                 @steps = @new_steps;
                 splice(@args); # already used to filter the user-steps
             }
-            # only local steps
-            when ("local")
-            {
-              guess_maindir();
-              @steps = grep { -d "$maindir/$_" } @steps;
-            }
             # only remote/subdir steps
             when ("remote")
             {
               guess_maindir();
               @steps = grep { ! -d "$maindir/$_" } @steps;
+              $remote = 1;
             }
             # only steps created on given date (YYYYMMDD)
             when ("date")
