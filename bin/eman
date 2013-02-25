@@ -20,6 +20,7 @@ use YAML::XS;
 use File::Temp qw/tempfile/;
 use Carp;
 use Term::ANSIColor;
+use Encode;
 use Getopt::Long;
 use Pod::Usage;
 use File::Basename;
@@ -32,6 +33,10 @@ use Fcntl qw(LOCK_EX LOCK_NB);
 use FindBin qw($Bin);
 use List::Util qw(min);
 my $eman = $Bin."/".basename($0); # full path to ourselves
+
+binmode(STDIN, ":utf8");
+binmode(STDOUT, ":utf8");
+binmode(STDERR, ":utf8");
 
 # command name abbreviations, identities provided for commands with no abbrevs
 my %expand_abbrev = qw(
@@ -960,30 +965,25 @@ sub collect {
     my ($name, $glob, $regexorcmd) = map { s/^ +//; s/ +$//; $_ }
                                      split /\t/, $line;
     my @files = ( map { glob($_."/".$glob) } @subdirs);
-    # print STDERR "$name ($glob):\n";
+    # print STDERR "$name ($glob): $regexorcmd\n";
     # print STDERR join("\n", @files);
     # print STDERR "\n\n";
     foreach my $f (@files) {
       my $step = guess_stepname_from_pathname($f); #$f; $step =~ s/\/.*//;
       my $name_to_res = undef;
+      my $cmd = undef;
       if ($regexorcmd =~ /^CMD:(.*)\$\$(.*)/) {
         # e.g. "CMD: du -sh $$"
-        my $res = `$1 $f $2`;
-        chomp $res;
-        if ($name eq "*") {
-          # assume the command emits name\tvalue pairs
-          foreach my $pair (split /\n/, $res) {
-            my ($k, $val) = split /\t/, $pair;
-            $name_to_res->{$k} = $val;
-          }
-        } else {
-          # whole output is the value
-          $res =~ s/\n+/ /;
-          $name_to_res->{$name} = $res;
-        }
+	$cmd = "$1 $f $2";
+      } elsif ($regexorcmd =~ /^CMD: *(.*)/) {
+	$cmd = "cat $f | $1";
       }
-      elsif ($regexorcmd =~ /^CMD: *(.*)/) {
-        my $res = `cat $f | $1`;
+      if (defined $cmd) {
+        # run the given command
+	# print STDERR "Running: $cmd\n";
+        my $res = `$cmd`;
+        $res = Encode::decode_utf8($res); # assume the command returns utf8
+	# print STDERR "GOT: $res\n";
         chomp $res;
         if ($name eq "*") {
           # assume the command emits name\tvalue pairs
@@ -997,11 +997,12 @@ sub collect {
           $name_to_res->{$name} = $res;
         }
       } else {
+        # no command, load the given file
         my $cont = load($f);
         if ($cont =~ /$regexorcmd/) {
           $name_to_res->{$name} = $1;
         } else {
-          print STDERR "$f:Missed result for $name, no match of /$regexorcmd/";
+          print STDERR "$f:Missed result for $name, no match of /$regexorcmd/\n";
           $ok = 0;
           next;
         }
