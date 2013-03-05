@@ -110,6 +110,7 @@ my $print_created_step = 0; # for machine use of eman init/clone
 my $recurse = 1; # in traceback; switched off when using vars -s
 my $sge = 1;
 my $do_start = 0;
+my $do_wait = 0; # when started an experiment, wait for it to finish
 my $do_outdate = 0;
 my $notree = 0; # set to 1 to avoid tree (indented) output in eman traceback
 my $add_tag = undef; # for newly inited steps, add the given tags
@@ -198,6 +199,7 @@ my %options = (
   "all-avoid!" => \$avoid_all,
   "add-tag|addtag=s@" => \$add_tag,
   "start!" => \$do_start,
+  "wait!" => \$do_wait,
   "outdate!" => \$do_outdate,  # outdate the redone/cloned step (the *top* only)
   "print-created-step!" => \$print_created_step,
   "reindex" => \$reindex,
@@ -657,34 +659,7 @@ if ($cmd eq "make-backlinks") {
 if ($cmd eq "wait") {
   $lock->unlock() if defined $lock;
   mydie "usage: eman wait SPEC ..." if 0 == scalar @ARGV;
-  my %steps = map { my $s = guess_step($_); ($s, load_status($s)) } @ARGV;
-  # check if any steps have no chance
-  my @no_chance = grep { $steps{$_}
-                         !~ /^(STARTING|RUNNING|DONE|FAILED|OUTDATED)$/ }
-                  keys %steps;
-  if (0 < scalar @no_chance) {
-    print STDERR "Won't wait for these, not running:\n";
-    foreach my $s (@no_chance) {
-      print STDERR "  $s\t$steps{$s}\n";
-    }
-    $waserror = 1;
-  }
-  my @queue = grep { $steps{$_} =~ /^(STARTING|RUNNING)$/ } keys %steps;
-  print STDERR "Waiting for ".scalar(@queue)." jobs.\n";
-  while (0 < scalar @queue) {
-    sleep $wait_sleep;
-    my @newqueue = ();
-    foreach my $step (@queue) {
-      my $s = load_status($step);
-      if ($s !~ /^(STARTING|RUNNING|DONE|FAILED|OUTDATED)$/ ) {
-        print STDERR "Got unexpected status: $step\t$s\n";
-        $waserror = 1;
-        next;
-      }
-      push @newqueue, $step if $s =~ /^(STARTING|RUNNING)$/;
-    }
-    @queue = @newqueue;
-  }
+  $waserror = do_wait(\@ARGV);
   exit $waserror;
 }
 
@@ -814,7 +789,7 @@ if ($cmd eq "start") {
   my $step = shift;
   mydie "usage: eman run STEPDIR" if ! defined $step;
   my $s = guess_step($step); # happily guess the exact step
-  $waserror = ! start($s);
+  $waserror = ! do_start($s);
   exit $waserror;
 }
 
@@ -860,7 +835,7 @@ if ($cmd eq "init") {
   mydie "usage: eman init STEPTYPE" if ! defined $steptype;
   my $s = init($steptype);
   $waserror = ! defined $s;
-  $waserror = ! start($s) if defined $s && $do_start && !$dryrun;
+  $waserror = ! do_start($s) if defined $s && $do_start && !$dryrun;
   print $s, "\n" if $print_created_step && defined $s;
   exit $waserror;
 }
@@ -883,7 +858,7 @@ if ($cmd eq "clone") {
                       } @srcvars;
     my $news = init(get_steptype($srcstep), \@usevars, $srcstep);
     $waserror = 1 if ! defined $news;
-    $waserror = ! start($news) if defined $news && $do_start && !$dryrun;
+    $waserror = ! do_start($news) if defined $news && $do_start && !$dryrun;
     print $news, "\n" if $print_created_step && defined $news;
     if ($do_outdate) {
       if ($waserror) {
@@ -899,7 +874,7 @@ if ($cmd eq "clone") {
     print Dump($recipe) if $debug;
     my $depmap = {};
     my $newtopstep = init_by_recipe($recipe, $depmap);
-    $waserror = ! start($newtopstep)
+    $waserror = ! do_start($newtopstep)
       if defined $newtopstep && $do_start && !$dryrun;
     if (defined $newtopstep) {
       if ($print_created_step) {
@@ -925,7 +900,7 @@ if ($command eq "redo") {
   my $recipe = traceback_to_recipe($s);
   my $depmap = {};
   my $newtopstep = init_by_recipe($recipe, $depmap);
-  $waserror = ! start($newtopstep)
+  $waserror = ! do_start($newtopstep)
     if defined $newtopstep && $do_start && !$dryrun;
   if (defined $newtopstep) {
     if ($print_created_step) {
@@ -1416,7 +1391,7 @@ sub prepare {
   return $ok;
 }
 
-sub start {
+sub do_start {
   # 1. check if all predecessors done, prepared or inited
   #    if *failed, fail
   # 2. walk back, make sure all are prepared (if not, prepare
@@ -1497,7 +1472,47 @@ sub start {
     return 0;
   }
 
+  if ($do_wait) {
+    return do_wait([$s]);
+  }
   return 1;
+}
+
+sub do_wait {
+  # wait for all given steps
+  my $step_specs = shift;
+  my $waserror;
+  
+  my %steps = map { my $s = guess_step($_); ($s, load_status($s)) }
+                @$step_specs;
+  # check if any steps have no chance
+  my @no_chance = grep { $steps{$_}
+                         !~ /^(STARTING|RUNNING|DONE|FAILED|OUTDATED)$/ }
+                  keys %steps;
+  if (0 < scalar @no_chance) {
+    print STDERR "Won't wait for these, not running:\n";
+    foreach my $s (@no_chance) {
+      print STDERR "  $s\t$steps{$s}\n";
+    }
+    $waserror = 1;
+  }
+  my @queue = grep { $steps{$_} =~ /^(STARTING|RUNNING)$/ } keys %steps;
+  print STDERR "Waiting for ".scalar(@queue)." jobs.\n";
+  while (0 < scalar @queue) {
+    sleep $wait_sleep;
+    my @newqueue = ();
+    foreach my $step (@queue) {
+      my $s = load_status($step);
+      if ($s !~ /^(STARTING|RUNNING|DONE|FAILED|OUTDATED)$/ ) {
+        print STDERR "Got unexpected status: $step\t$s\n";
+        $waserror = 1;
+        next;
+      }
+      push @newqueue, $step if $s =~ /^(STARTING|RUNNING)$/;
+    }
+    @queue = @newqueue;
+  }
+  return $waserror;
 }
 
 sub fold_back {
