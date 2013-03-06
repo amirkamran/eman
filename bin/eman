@@ -1215,6 +1215,15 @@ sub init_by_recipe {
     }
 
     # print "LEAVING INIT_BY_RECIPE: $thisname\n";
+
+    if ($do_outdate && !$dryrun) {
+      my $oldpath = get_stepdir($thisname);
+      if (-e $oldpath) {
+        do_outdate($thisname);
+	# consider outdating only local steps unless --remote
+      }
+    }
+
     return $newstep;
   }
 }
@@ -3256,12 +3265,13 @@ sub select_steps {
 
 sub do_outdate {
   my $step = shift;
-  chdir_to_stepdir($step);
+  my $olddir = chdir_to_stepdir($step);
   if ($dryrun) {
     print STDERR "Not outdating $step in --dry-run.\n";
   } else {
     save("eman.status", "OUTDATED");
   }
+  mychdir($olddir);
 }
 
 sub add_dir {
