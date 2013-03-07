@@ -2850,7 +2850,7 @@ sub scan {
     my $pos = "$rowid\t$colid";
     my $value = main::field($line, $col_to_pick);
     my $thisinfo = $line;
-    if (defined $table{$pos}
+    if (defined $table{$pos} && !defined $self->{collectdelim}
         && ($table{$pos} ne $value || $self->{verbose} >= 2)) {
       $out .= "Replaced: ".$tableinfo{$pos}."\n";
       $out .= "    With: ".$thisinfo."\n";
@@ -2989,7 +2989,7 @@ sub tabulate {
           $waserror ++;
           next;
         }
-        if (/^(forbidden|required|cols|rows|rowsort|colsort|verbose|print_max_marks):(.*)$/) {
+        if (/^(forbidden|required|cols|rows|rowsort|colsort|verbose|print_max_marks|collectdelim):(.*)$/) {
           my $k = $1;
           my $v = $2;
           $specs->{$k} .= "\n" if defined $specs->{$k};
