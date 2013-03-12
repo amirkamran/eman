@@ -1064,7 +1064,12 @@ sub parse_recipe {
           push @{$recipe->{"vars"}}, $line;
         print STDERR "$cutprefix:    got var: $line\n" if $debug;
         } else {
-          mydie "Bad recipe, strange line: $thisline";
+	  if ($thisline eq $tailexact) {
+	    next; # skipping blank line, probably introduced by deliberate
+	          #removal of a variable, -s /...//
+          } else {
+            mydie "Bad recipe, strange line: $thisline";
+	  }
         }
       }
       next; # now read deps etc
