@@ -2162,7 +2162,8 @@ sub load_jobid {
 }
 sub show_disk_usage {
   my $step = shift;
-  my $du = `du -sh $step 2>/dev/null | cut -f1`;
+  my $stepdir = get_stepdir($step);
+  my $du = `du -sh $stepdir 2>/dev/null | cut -f1`;
   chomp $du;
   return $du;
 }
@@ -2806,7 +2807,9 @@ sub scan {
   my %coldef; my %rowdef;
   my @coldef; my @rowdef;
   my %table;
-  my %tableinfo;
+  my %tableinfo; # for reporting conflicts
+  my %showtable; # for showing something else than results
+
   my %used = ();
   LINE: foreach my $line (@$lines) {
     foreach my $r (@{$self->{reqtoksf}}) {
@@ -2849,6 +2852,18 @@ sub scan {
     }
     my $pos = "$rowid\t$colid";
     my $value = main::field($line, $col_to_pick);
+    my $showvalue;
+    if ($self->{show} eq "%f") {
+      $showvalue = $value;
+    } elsif ($self->{show} eq "%s") {
+      $showvalue = main::field($line, 0);
+    } elsif ($self->{show} eq "%S") {
+      $showvalue = main::field($line, 0);
+      $showvalue =~ s/^\E$dirprefix\Q[-_a-z9-0]+\.//;
+    } elsif ($self->{show} eq "%t") {
+      $showvalue = main::field($line, 1);
+    }
+
     my $thisinfo = $line;
     if (defined $table{$pos} && !defined $self->{collectdelim}
         && ($table{$pos} ne $value || $self->{verbose} >= 2)) {
@@ -2857,10 +2872,15 @@ sub scan {
       delete $used{"@rowid\t@colid\t$tableinfo{$pos}"};
     }
     if (defined $self->{collectdelim}) {
-      $table{$pos} .= $self->{collectdelim} if defined $table{$pos};
+      if (defined $table{$pos}) {
+        $table{$pos} .= $self->{collectdelim};
+        $showtable{$pos} .= $self->{collectdelim};
+      }
       $table{$pos} .= $value;
+      $showtable{$pos} .= $showvalue;
     } else {
       $table{$pos} = $value;
+      $showtable{$pos} = $showvalue;
       # $out.="REGISTERING: $pos  ==> $value\n";
     }
     $tableinfo{$pos} = $thisinfo;
@@ -2888,6 +2908,7 @@ sub scan {
   }
   # Prepare the table
   my @tab;
+  my @showtab;
   my @mark;
   my $firstcolwidth = 0;
   my @colwidth = map {length($_)} @coldef;
@@ -2898,10 +2919,20 @@ sub scan {
     for(my $c=0; $c<=$#sortedcoldef; $c++) {
       my $col = $sortedcoldef[$c];
       my $pos = "$row\t$col";
-      my $thisval = defined $table{$pos} ? $table{$pos} : $self->{"blankvalue"};
+      my $thisval;
+      my $showthisval;
+      if (defined $table{$pos}) {
+        $thisval = $table{$pos};
+        $showthisval = $showtable{$pos};
+      } else {
+        $thisval = $self->{"blankvalue"};
+        $showthisval = $self->{"blankvalue"};
+      }
       $tab[$r][$c] = $thisval;
+      $showtab[$r][$c] = $showthisval;
       push @{$val_to_colidx->{$thisval}}, $c;
-      $colwidth[$c] = length($thisval) if length($thisval) > $colwidth[$c];
+      $colwidth[$c] = length($showthisval)
+        if length($showthisval) > $colwidth[$c];
     }
     my @sortedvals = sort {take_just_number($b)<=>take_just_number($a)}
                      keys %$val_to_colidx;
@@ -2938,9 +2969,9 @@ sub scan {
     my $pad = " " x ($firstcolwidth - length($row));
     $out .= "$row$pad";
     for(my $c=0; $c<=$#sortedcoldef; $c++) {
-      my $thisval = $tab[$r][$c];
-      my $pad = " " x ($colwidth[$c] - length($thisval));
-      $out .= "\t$pad$thisval";
+      my $showthisval = $showtab[$r][$c];
+      my $pad = " " x ($colwidth[$c] - length($showthisval));
+      $out .= "\t$pad$showthisval";
       if ($self->{print_max_marks}) {
         $out .= defined $mark[$r][$c] ? $mark[$r][$c] : " ";
       }
@@ -2989,7 +3020,7 @@ sub tabulate {
           $waserror ++;
           next;
         }
-        if (/^(forbidden|required|cols|rows|rowsort|colsort|verbose|print_max_marks|collectdelim):(.*)$/) {
+        if (/^(forbidden|required|cols|rows|rowsort|colsort|verbose|print_max_marks|collectdelim|show):(.*)$/) {
           my $k = $1;
           my $v = $2;
           $specs->{$k} .= "\n" if defined $specs->{$k};
@@ -3001,6 +3032,7 @@ sub tabulate {
       }
       die "$inf:$nr: End of file in TABLE starting at $startnr" if ! $gotend;
       $specs->{"data_column"} = 3;
+      $specs->{"show"} = "%f" if !defined $specs->{"show"};
       foreach my $attr (qw(rows cols)) {
         if (!defined $specs->{$attr}) {
           print STDERR "$inf:$nr:Required attribute $attr missing.\n";
