@@ -1495,7 +1495,7 @@ sub do_start {
 sub do_wait {
   # wait for all given steps
   my $step_specs = shift;
-  my $waserror;
+  my $waserror = 0;
   
   my %steps = map { my $s = guess_step($_); ($s, load_status($s)) }
                 @$step_specs;
