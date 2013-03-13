@@ -2526,6 +2526,7 @@ sub get_hash_from_vars_deps {
   @usevars =
     grep { ! /^[^=]+=''$/ } grep { ! /^[^=]+=""$/ } # skip empty-valued vars
     grep { /^[^=]+=./ }  # skip empty-valued vars
+    grep { ! /^EMAN_/ } # skip eman's internal variables (such as EMAN_CORES)
     grep { /./ } # skip empty lines
     map  {s/$name/---SELF---/g; $_}
     @usevars;
