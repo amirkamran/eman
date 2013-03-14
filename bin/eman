@@ -115,6 +115,7 @@ my $do_outdate = 0;
 my $notree = 0; # set to 1 to avoid tree (indented) output in eman traceback
 my $add_tag = undef; # for newly inited steps, add the given tags
 my $subst = undef;
+my $substvar = undef;
 my $avoid = undef;
 my $avoid_more = undef; # corresponds to --redo
 my $reuse = undef;
@@ -191,7 +192,8 @@ my %options = (
   "only-leaves|only-leafs!" => \$list_only_steps_with_no_users,
   "disk-usage|dus!" => \$show_disk_usage,
   "read-only|readonly!" => \$readonly,
-  "s|subst=s@" => \$subst,
+  "s|substitute=s@" => \$subst,
+  "sv|substitute-var=s@" => \$substvar,
   "avoid=s@" => \$avoid,
   "reuse=s@" => \$reuse,
   "redo=s@" => \$avoid_more,
@@ -221,6 +223,12 @@ my %options = (
 GetOptions(%options) or exit 1;
 
 my $show_tree_in_traceback = ! $notree;
+
+# interpret substvar VAR=x as subst /^VAR=.*/VAR=x/
+foreach my $sv (@$substvar) {
+  my $varname = $sv; $varname =~ s/=.*//;
+  push @$subst, "/^$varname=.*/$sv/";
+}
 
 # colorize regex outputs if substituting and output is terminal (or wished)
 if ($colorize || (!defined $colorize && -t STDOUT)) {
@@ -1854,6 +1862,9 @@ sub print_vars {
     # perform substitutions, if defined and step not reused
     if (defined $subst && ! $reuse{$s}) {
       foreach my $s (@$subst) {
+	# debugging aid:
+        # print "$prefix$l <----- old value\n" if $l =~ /DECO|TGTAUG|LMS/;
+        # print "$prefix   =~ s".$s."\n" if $l =~ /DECO|TGTAUG|LMS/;
         eval '$l =~ s'.$s;
       }
     }
@@ -3536,8 +3547,9 @@ eman, experiment manager
                              #   tracebacks with --vars fully specify
                              #   the experiment
     -s /foo/bar/             #   modify vars; can be repeated
-                             #   implies --vars
-                             #   highlights diff if to terminal
+                             #     implies --vars
+                             #     highlights diff if to terminal
+    -sv VAR=newvalue         #   use -s to set the given VAR; can be repeated
     --ignore STEPTYPE        #   do not include STEPTYPE in traceback
   eman traceforward SPEC ... # show tree of the steps and users (successors)
   eman duplicates            # show groups of 2+ steps having same vars
