@@ -3515,7 +3515,7 @@ eman, experiment manager
   VAR=val eman clone SPEC    # create new step based on SPEC
 
   eman clone < traceback     # create step by cloning incl. predecessors
-  eman redo SPEC             # equals 'eman tb --vars SPEC | eman clone'
+  eman redo EXPSPEC          # equals 'eman tb --vars SPEC | eman clone'
                              # good predecessors are reused by default
     --reuse=SPEC             #   reuse the given step (incl. predecs.)
     --ignore=STEPTYPE        #   reuse steps of the given type
@@ -3527,7 +3527,7 @@ eman, experiment manager
   eman prepare SPEC          # prepare inited step
   eman run SPEC              # run prepared step
   eman continue SPEC         # continue a single step that failed
-  eman start SPEC            # prepare and run, incl. all predecessors
+  eman start EXPSPEC         # prepare and run, incl. all predecessors
     --priority -200          #   cluster scheduling priority (default: -100)
     --mem 15g                #   required memory (default: 6g)
     --disk 20g               #   required space in /mnt/h/tmp
@@ -3543,7 +3543,7 @@ eman, experiment manager
   eman vars SPEC/STEPTYPE    # like 'list --vars'
   eman tag SPEC/STEPTYPE     # like 'list --tag'
   eman users SPEC ...        # list all steps that use the given step
-  eman traceback SPEC ...    # show tree of the steps and predecessors
+  eman traceback EXPSPEC ... # show tree of the steps and predecessors
     --tag --vars --status    #   include extra information
                              #   tracebacks with --vars fully specify
                              #   the experiment
@@ -3552,7 +3552,7 @@ eman, experiment manager
                              #     highlights diff if to terminal
     -sv VAR=newvalue         #   use -s to set the given VAR; can be repeated
     --ignore STEPTYPE        #   do not include STEPTYPE in traceback
-  eman traceforward SPEC ... # show tree of the steps and users (successors)
+  eman traceforward EXPSPEC  # show tree of the steps and users (successors)
   eman duplicates            # show groups of 2+ steps having same vars
     --tag --vars --status    #   include relevant information
     --log --jobid            #   and the tail of the log or SGE job ID
@@ -3572,10 +3572,21 @@ eman, experiment manager
                              # you can use remote steps, clone them etc.
   eman adddir DIR            # add a subdirectory for steps
 
-SPEC is a text snippet capable of identifying a step uniquely, such as
-'s.align.12345678.20121010-1010'. You can even use '.' and '`pwd`' as SPEC.
+SPEC is a step specifier, i.e. a text snippet capable of identifying a step
+uniquely. This can be a full stepdir name such as
+'s.align.12345678.20121010-1010' or any sufficient portion of it such as
+'678.2013'. You can even use '.' and '`pwd`' as SPEC. And once results are
+collected, any unambigous result number can be also used to refer to the
+respective step directory.
+
+EXPSPEC is an experiment specifier. Formally, EXPSPEC and SPEC are identical,
+they refer to a particular unambiguous step directory. The difference lies in
+the command itself: SPEC-commands operate on the single step directory while
+EXPSPEC-commands operate on the whole structure of the step and its
+predecessors.
 
 STEPTYPE specifies the seed to be used, e.g. 'align'.
+
 
 =head1 DESCRIPTION
 
@@ -4061,6 +4072,6 @@ Ondřej Bojar <obo@matfyz.cz>
 
 Contributions by Aleš Tamchyna and Dan Zeman.
 
-Copyright 2010, 2011, 2012 Ondřej Bojar, All rights reserved.
+Copyright 2010-2013, the respective authors. All rights reserved.
 
 =cut
