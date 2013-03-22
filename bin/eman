@@ -50,6 +50,8 @@ my %expand_abbrev = qw(
   tf traceforward
   traceusers traceforward
   tu traceforward
+  to traceorigin
+  td tracederivatives
   rm abolish
   st start
   pr prepare
@@ -498,13 +500,24 @@ if (! defined $idx || $nolazy) {
       my $stepname = basename($s);
 
       # mark that this step uses its deps
-      my $deps = load_depsarr($stepname);
-      if (defined $deps) {
-        foreach my $d (@$deps) {
-          $idx->{'USED_BY'}->{$d}->{$stepname} = 1;
-        }
-      }
+      load_list_into_index($stepname, 'USED_BY', 'eman.deps');
+      load_list_into_index($stepname, 'DERIVATIVES', 'eman.derivatives');
+      load_list_into_index($stepname, 'DERIVED_FROM', 'eman.derived_from');
       print STDERR "$stepname: $idx->{$stepname}\n" if $debug;
+    }
+  }
+}
+
+sub load_list_into_index {
+  my $stepname = shift;
+  my $index_field = shift;
+  my $filename = shift;
+
+  # collect sources of this step
+  my $items = load_arr($stepname, $filename);
+  if (defined $items) {
+    foreach my $d (@$items) {
+      $idx->{$index_field}->{$d}->{$stepname} = 1;
     }
   }
 }
@@ -653,13 +666,32 @@ if ($cmd eq "users") {
   exit 0;
 }
 
+if ($cmd eq "tracederivatives") {
+  $lock->unlock() if defined $lock;
+  mydie "usage: eman derivatives SPEC ..." if 0 == scalar @ARGV;
+  foreach my $key (@ARGV) {
+    my $step = guess_step($key);
+    traceindex("", $step, 'DERIVED_FROM');
+  }
+  exit 0;
+}
+
+if ($cmd eq "traceorigin") {
+  $lock->unlock() if defined $lock;
+  mydie "usage: eman traceorigin SPEC ..." if 0 == scalar @ARGV;
+  foreach my $key (@ARGV) {
+    my $step = guess_step($key);
+    traceindex("", $step, 'DERIVATIVES');
+  }
+  exit 0;
+}
+
 if ($cmd eq "traceforward") {
   $lock->unlock() if defined $lock;
   mydie "usage: eman traceforward SPEC ..." if 0 == scalar @ARGV;
   foreach my $key (@ARGV) {
     my $step = guess_step($key);
-#    my $users = $idx->{'USED_BY'}->{$step};
-    traceforward("", $step);
+    traceindex("", $step, 'USED_BY');
   }
   exit 0;
 }
@@ -1995,10 +2027,11 @@ sub traceback {
   }
 }
 
-sub traceforward {
+sub traceindex {
   # Find recursively all users of the step and all their users.
   my $prefix = shift;
   my $step = shift;
+  my $indexfield = shift;
 
   return if $avoid{$step} || $ignore{$step};
     # explicit avoiding of individual steps
@@ -2006,13 +2039,13 @@ sub traceforward {
 
   print_details_in_tracebacks($prefix, $step);
 
-  my $users = $idx->{'USED_BY'}->{$step};
+  my $users = $idx->{$indexfield}->{$step};
   return if !defined $users;
   my @users = keys %$users;
   my $indent = $show_tree_in_traceback ? "|  " : "";
   return if !$recurse;
   foreach my $usr (@users) {
-    traceforward($prefix.$indent, $usr);
+    traceindex($prefix.$indent, $usr, $indexfield);
   }
 }
 
@@ -2165,23 +2198,29 @@ sub compiled_tag_string {
 }
 
 
-sub load_depsarr {
+sub load_arr {
   my $step = shift;
-  my $depsstr = try_load(absolutize_within_stepdir($step, "eman.deps"));
-  my $depsarr;
-  if (defined $depsstr) {
-    my @deps = split /\n/, $depsstr;
-    $depsarr = [];
+  my $filename = shift;
+  my $str = try_load(absolutize_within_stepdir($step, $filename));
+  my $arr;
+  if (defined $str) {
+    my @lines = split /\n/, $str;
+    $arr = [];
     my %seen = ();
-    foreach my $d (@deps) {
+    foreach my $d (@lines) {
       next if $seen{$d};
-      push @$depsarr, $d;
+      push @$arr, $d;
       $seen{$d} = 1;
     }
   }
-  return $depsarr;
-
+  return $arr;
 }
+
+sub load_depsarr {
+  my $step = shift;
+  return load_arr($step, "eman.deps");
+}
+
 sub load_vars_str {
   my $step = shift;
   return try_load(absolutize_within_stepdir($step, "eman.vars"));
@@ -2599,14 +2638,16 @@ sub all_steps {
     next if $s =~ /(jid|path)$/; # this is a job id entry
     $steps_to_list{$s} = 1;
   }
-  if (defined $idx->{'USED_BY'}) {
-    # eagerly collect also all steps mentioned in deps
-    foreach my $d (keys %{$idx->{'USED_BY'}}) {
-      $steps_to_list{$d} = 1;
-      my $sources = $idx->{'USED_BY'}->{$d};
-      next if !defined $sources;
-      foreach my $s (keys %$sources) {
-        $steps_to_list{$s} = 1;
+  foreach my $metalist ('USED_BY', 'DERIVED_FROM', 'DERIVATIVES') {
+    if (defined $idx->{$metalist}) {
+      # eagerly collect also all steps mentioned in deps
+      foreach my $d (keys %{$idx->{$metalist}}) {
+        $steps_to_list{$d} = 1;
+        my $sources = $idx->{$metalist}->{$d};
+        next if !defined $sources;
+        foreach my $s (keys %$sources) {
+          $steps_to_list{$s} = 1;
+        }
       }
     }
   }
