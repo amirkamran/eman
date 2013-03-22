@@ -1949,13 +1949,10 @@ sub traceback_to_recipe {
   }
   return $recipe;
 }
-sub traceback {
+
+sub print_details_in_tracebacks {
   my $prefix = shift;
   my $step = shift;
-
-  return if $avoid{$step} || $ignore{$step};
-    # explicit avoiding of individual steps
-  return if $ignore{get_steptype($step)}; # avoiding steps of a given type
 
   my $indent = $show_tree_in_traceback ? "+- " : "";
   print "$prefix$indent$step\n";
@@ -1969,6 +1966,20 @@ sub traceback {
   push @kws, compiled_tag_string($step) || "" if $show_tag;
   $indent = $show_tree_in_traceback ? "|  | " : "";
   print $prefix.$indent."Job: @kws\n" if 0 < scalar @kws;
+  print_vars($prefix.$indent, $step) if $show_vars;
+  print_log($prefix.$indent, $step) if $show_log;
+}
+
+sub traceback {
+  my $prefix = shift;
+  my $step = shift;
+
+  return if $avoid{$step} || $ignore{$step};
+    # explicit avoiding of individual steps
+  return if $ignore{get_steptype($step)}; # avoiding steps of a given type
+
+  print_details_in_tracebacks($prefix, $step);
+
   my $deps = load_depsarr($step);
   # if this step is reused, all deps are also reused
   # (this is useful in 'tb -s')
@@ -1977,14 +1988,34 @@ sub traceback {
       $reuse{$dep} = 1;
     }
   }
-  print_vars($prefix.$indent, $step) if $show_vars;
-  print_log($prefix.$indent, $step) if $show_log;
-  $indent = $show_tree_in_traceback ? "|  " : "";
+  my $indent = $show_tree_in_traceback ? "|  " : "";
   return if !$recurse;
   foreach my $dep (@$deps) {
     traceback($prefix.$indent, $dep);
   }
 }
+
+sub traceforward {
+  # Find recursively all users of the step and all their users.
+  my $prefix = shift;
+  my $step = shift;
+
+  return if $avoid{$step} || $ignore{$step};
+    # explicit avoiding of individual steps
+  return if $ignore{get_steptype($step)}; # avoiding steps of a given type
+
+  print_details_in_tracebacks($prefix, $step);
+
+  my $users = $idx->{'USED_BY'}->{$step};
+  return if !defined $users;
+  my @users = keys %$users;
+  my $indent = $show_tree_in_traceback ? "|  " : "";
+  return if !$recurse;
+  foreach my $usr (@users) {
+    traceforward($prefix.$indent, $usr);
+  }
+}
+
 
 sub mk_backlinks {
   my $step = shift;
@@ -2007,47 +2038,6 @@ sub mk_backlinks {
         if !$success || !$symlink_created;
     }
     mk_backlinks($dep);
-  }
-}
-
-sub traceforward {
-  # Find recursively all users of the step and all their users.
-  my $prefix = shift;
-  my $step = shift;
-
-  return if $avoid{$step} || $ignore{$step};
-    # explicit avoiding of individual steps
-  return if $ignore{get_steptype($step)}; # avoiding steps of a given type
-
-  my $indent = $show_tree_in_traceback ? "+- " : "";
-  print "$prefix$indent$step\n";
-  my @kws; # space-delimited keywords
-  if ($show_jobid) {
-    my $jid = load_jobid($step);
-    push @kws, $jid if defined $jid && $jid ne "-";
-  }
-  push @kws, load_status($step) || "" if $show_status;
-  push @kws, show_dir($step) || "" if $showdir;
-  push @kws, compiled_tag_string($step) || "" if $show_tag;
-  $indent = $show_tree_in_traceback ? "|  | " : "";
-  print $prefix.$indent."Job: @kws\n" if 0 < scalar @kws;
-  my $users = $idx->{'USED_BY'}->{$step};
-  return if !defined $users;
-  my @deps = keys %$users;
-  my $deps = \@deps;
-  # if this step is reused, all deps are also reused
-  # (this is useful in 'tb -s')
-  if ($reuse{$step}) {
-    foreach my $dep (@$deps) {
-      $reuse{$dep} = 1;
-    }
-  }
-  print_vars($prefix.$indent, $step) if $show_vars;
-  print_log($prefix.$indent, $step) if $show_log;
-  $indent = $show_tree_in_traceback ? "|  " : "";
-  return if !$recurse;
-  foreach my $dep (@$deps) {
-    traceforward($prefix.$indent, $dep);
   }
 }
 
