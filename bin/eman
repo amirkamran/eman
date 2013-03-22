@@ -1381,13 +1381,15 @@ sub init {
     add_stepdir_to_index($s); # so that further cloning can use that
     saveidx($idx);
     print STDERR "Inited: $stepname\n";
-    # save also that where we are derived from
-    my $derived_from_dir = get_stepdir($derived_from);
-    if (defined $derived_from_dir && -w $derived_from_dir) {
-      mychdir($derived_from_dir);
-      append("eman.derivatives", $stepname);
-    } else {
-      print STDERR "Not mentioning in $derived_from that we derived $stepname\n";
+    if (defined $derived_from) {
+      # save also that where we are derived from
+      my $derived_from_dir = get_stepdir($derived_from);
+      if (defined $derived_from_dir && -w $derived_from_dir) {
+        mychdir($derived_from_dir);
+        append("eman.derivatives", $stepname);
+      } else {
+        print STDERR "Not mentioning in $derived_from that we derived $stepname from it.\n";
+      }
     }
   } elsif ($preservedir) {
     print STDERR "Failed to init the step. Check and delete: $stepname\n";
@@ -2097,6 +2099,7 @@ sub get_stepdir {
   my $step = shift;
   # given a step name, scan all the subdirs and return full path
   # to the step's directory
+  confess if !defined $step;
   return $idx->{$step . "path"} if defined $idx->{$step . "path"};
   # scan all subdirs
   for my $dir (@subdirs) {
