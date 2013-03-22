@@ -508,7 +508,7 @@ if (! defined $idx || $nolazy) {
   }
 }
 
-if ($cmd eq "retag" || $cmd eq "reindex") {
+if ($cmd eq "retag") { # || $cmd eq "reindex") {
   # reindex implies also refreshing autotags
   if (-e "eman.autotags") {
     $autotag_rules = load_autotag_rules("eman.autotags");
@@ -1371,6 +1371,14 @@ sub init {
     add_stepdir_to_index($s); # so that further cloning can use that
     saveidx($idx);
     print STDERR "Inited: $stepname\n";
+    # save also that where we are derived from
+    my $derived_from_dir = get_stepdir($derived_from);
+    if (defined $derived_from_dir && -w $derived_from_dir) {
+      mychdir($derived_from_dir);
+      append("eman.derivatives", $stepname);
+    } else {
+      print STDERR "Not mentioning in $derived_from that we derived $stepname\n";
+    }
   } elsif ($preservedir) {
     print STDERR "Failed to init the step. Check and delete: $stepname\n";
     $waserror = 1;
@@ -1976,6 +1984,7 @@ sub traceforward {
     push @kws, $jid if defined $jid && $jid ne "-";
   }
   push @kws, load_status($step) || "" if $show_status;
+  push @kws, show_dir($step) || "" if $showdir;
   push @kws, compiled_tag_string($step) || "" if $show_tag;
   $indent = $show_tree_in_traceback ? "|  | " : "";
   print $prefix.$indent."Job: @kws\n" if 0 < scalar @kws;
@@ -3384,6 +3393,14 @@ sub save {
   print $h "\n" if $data ne "" && $data !~ /\n$/m;
   close $h;
 }
+sub append {
+  my $f = shift;
+  my $data = shift;
+  my $h = my_save($f, "do-append");
+  print $h $data;
+  print $h "\n" if $data ne "" && $data !~ /\n$/m;
+  close $h;
+}
 
 sub try_open {
   my $f = shift;
@@ -3436,16 +3453,17 @@ sub my_open {
 
 sub my_save {
   my $f = shift;
-
+  my $do_append = shift;
+  my $appendop = $do_append ? ">" : "";
   my $opn;
   my $hdl;
   # file might not recognize some files!
   if ($f =~ /\.gz$/) {
-    $opn = "| gzip -c > $f";
+    $opn = "| gzip -c >$appendop $f";
   } elsif ($f =~ /\.bz2$/) {
-    $opn = "| bzip2 > $f";
+    $opn = "| bzip2 >$appendop $f";
   } else {
-    $opn = "> $f";
+    $opn = ">$appendop $f";
   }
   mkpath( dirname($f) );
   open $hdl, $opn or confess "Can't write to '$opn': $!";
