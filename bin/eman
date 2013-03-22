@@ -3368,6 +3368,7 @@ sub do_outdate {
   if ($dryrun) {
     print STDERR "Not outdating $step in --dry-run.\n";
   } else {
+    # perhaps should not outdate abolished steps?
     save("eman.status", "OUTDATED");
   }
   mychdir($olddir);
