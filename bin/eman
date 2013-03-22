@@ -82,6 +82,7 @@ my %expand_abbrev = qw(
   path path
   getvar get-var
   mkbln make-backlinks
+  ann annotate
 );
 # all expanded names are also allowed:
 foreach my $val (values %expand_abbrev) {
@@ -581,6 +582,15 @@ if ($cmd eq "tag") {
   $lock->unlock() if defined $lock;
   $show_tag = 1;
   $waserror = !list([@ARGV]);
+  exit $waserror;
+}
+
+if ($cmd eq "annotate") {
+  # replacing s.stepname.hash.date (.*) with the required details
+  # useful for updating notes
+  $lock->unlock() if defined $lock;
+  $show_status = 1;
+  $waserror = !annotate();
   exit $waserror;
 }
 
@@ -1848,15 +1858,46 @@ sub list {
   return $ok;
 }
 
+sub annotate_replace {
+  my $s = shift;
+  my $comment = shift;
+  return $s.$comment if ! defined $idx->{$s}; # this is not a step
+  my @details = short_details($s);
+  if (0 == scalar @details) {
+    if ($comment eq " ()") {
+      return $s;
+    } else {
+      return $s.$comment;
+    }
+  } else {
+    return $s." (".join(" ", @details).")";
+  }
+}
+
+sub annotate {
+  # no arguments
+  while (<>) {
+    s/(\Q$dirprefix\E.*\.\d{8,8}-\d{4,4})(( \([^\)]*\))?)/annotate_replace $1,$2/ge;
+    print;
+  }
+  return 1; # there was no error in annotation
+}
+
+sub short_details {
+  my $s = shift;
+  my @out = ();
+  push @out, load_status($s) if $show_status;
+  push @out, compiled_tag_string($s) if $show_tag;
+  push @out, (load_jobid($s) || "") if $show_jobid;
+  push @out, show_disk_usage($s) if $show_disk_usage;
+  push @out, show_dir($s) if $showdir;
+  return @out;
+}
 sub print_short {
   my $s = shift;
 
   print $s;
-  print "\t", load_status($s) if $show_status;
-  print "\t", compiled_tag_string($s) if $show_tag;
-  print "\t", (load_jobid($s) || "") if $show_jobid;
-  print "\t", show_disk_usage($s) if $show_disk_usage;
-  print "\t", show_dir($s) if $showdir;
+  print "\t", join("\t", short_details($s));
   print "\n";
   print_vars("  ", $s) if $show_vars;
   print_log("  ", $s) if $show_log;
@@ -3560,6 +3601,7 @@ eman, experiment manager
   eman status SPEC/STEPTYPE  # like 'list --status', abbr. 'stat'
   eman vars SPEC/STEPTYPE    # like 'list --vars'
   eman tag SPEC/STEPTYPE     # like 'list --tag'
+  eman annotate <txt >txt    # adds --stat, --tag, ... after stepname
   eman users SPEC ...        # list all steps that use the given step
   eman traceback EXPSPEC ... # show tree of the steps and predecessors
     --tag --vars --status    #   include extra information
