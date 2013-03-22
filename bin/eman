@@ -509,7 +509,7 @@ if (! defined $idx || $nolazy) {
   }
 }
 
-if ($cmd eq "retag") { # || $cmd eq "reindex") {
+if ($cmd eq "retag" || $cmd eq "reindex") {
   # reindex implies also refreshing autotags
   if (-e "eman.autotags") {
     $autotag_rules = load_autotag_rules("eman.autotags");
@@ -2678,9 +2678,11 @@ sub reindex_tags {
   # first add 'direct' tags, i.e. manual tags and autotags implied by the rules
   # to individual steps
   foreach my $step (all_steps()) {
+    print STDERR "$step: Copying standard tags into index.\n" if $debug;
     # first copy step manual tags to the index
     $idx->{'STEP_TO_ALLTAGS'}->{$step} = load_tag_hash($step);
     # then add the direct autotags
+    print STDERR "$step: Adding direct autotags.\n" if $debug;
     my $steptype = get_steptype($step);
     next if ! defined $autotag_rules->{$steptype};
     my $varsstr = load_vars_str($step);
@@ -2702,6 +2704,7 @@ sub reindex_tags {
     # however, this needs to be applied only after inheriting...
   }
   # Add indirect tags, i.e. tags inherited from steps above
+  print STDERR "Propagating tags...\n" if $debug;
   my $indexed;
   foreach my $step (all_steps()) {
     next if $indexed->{$step};
