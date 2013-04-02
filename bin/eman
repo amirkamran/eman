@@ -1911,7 +1911,7 @@ sub annotate_replace {
 sub annotate {
   # no arguments
   while (<>) {
-    s/(\Q$dirprefix\E.*\.\d{8,8}-\d{4,4})(( \([^\)]*\))?)/annotate_replace $1,$2/ge;
+    s/(\Q$dirprefix\E\.*[^\s]*\.\d{8}-\d{4})(( \([^\)]*\))?)/annotate_replace $1,$2/ge;
     print;
   }
   return 1; # there was no error in annotation
