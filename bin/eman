@@ -2955,24 +2955,27 @@ sub scan {
       $coldef{$colid} = 1;
     }
     my $pos = "$rowid\t$colid";
-    my $value = main::field($line, $col_to_pick);
+    my @cols = split /\t/, $line;
+    my $value = $cols[$col_to_pick];
     my $showvalue;
     if ($self->{show} eq "%f") {
       $showvalue = $value;
     } elsif ($self->{show} eq "%s") {
-      $showvalue = main::field($line, 0);
+      $showvalue = $cols[0];
     } elsif ($self->{show} eq "%S") {
-      $showvalue = main::field($line, 0);
+      $showvalue = $cols[0];
       $showvalue =~ s/^\E$dirprefix\Q[-_a-z9-0]+\.//;
     } elsif ($self->{show} eq "%t") {
-      $showvalue = main::field($line, 1);
+      $showvalue = $cols[1];
     }
 
-    my $thisinfo = $line;
+    my $thisinfo = [@cols];
     if (defined $table{$pos} && !defined $self->{collectdelim}
         && ($table{$pos} ne $value || $self->{verbose} >= 2)) {
-      $out .= "Replaced: ".$tableinfo{$pos}."\n";
-      $out .= "    With: ".$thisinfo."\n";
+      $out .= "Replaced: ".join("\t", @{$tableinfo{$pos}})."\n";
+      my @with = @cols;
+      $with[4] = "--- identical ---" if $with[4] eq $tableinfo{$pos}->[4];
+      $out .= "    With: ".join("\t", @with)."\n";
       delete $used{"@rowid\t@colid\t$tableinfo{$pos}"};
     }
     if (defined $self->{collectdelim}) {
