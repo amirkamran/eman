@@ -2749,8 +2749,10 @@ sub reindex_tags {
 sub add_inherited_tags {
   my $indexed = shift;
   my $step = shift;
+  confess if ! defined $indexed || ! defined $step;
   my $deps = load_depsarr($step);
   $deps = [] if !defined $deps;
+  $indexed->{$step} = 1; # myself, I am indexed
   print STDERR "$step: @$deps\n" if $debug;
   foreach my $dep (@$deps) {
     print STDERR "for $step: $dep: ", compiled_tag_string($dep), "\n" if $debug;
@@ -2779,7 +2781,6 @@ sub add_inherited_tags {
         += $idx->{'STEP_TO_ALLTAGS'}->{$dep}->{$tag};
     }
   }
-  $indexed->{$step} = 1;
   return $indexed;
 }
 
@@ -3496,6 +3497,7 @@ sub try_open {
   my $opn;
   my $hdl;
   my $ft = `file $f`;
+  $ft = "" if ! defined $ft;
   # file might not recognize some files!
   if ($f =~ /\.gz$/ || $ft =~ /gzip compressed data/) {
     $opn = "zcat $f |";
@@ -3520,6 +3522,7 @@ sub my_open {
   my $opn;
   my $hdl;
   my $ft = `file $f`;
+  $ft = "" if ! defined $ft;
   # file might not recognize some files!
   if ($f =~ /\.gz$/ || $ft =~ /gzip compressed data/) {
     $opn = "zcat $f |";
@@ -3539,7 +3542,6 @@ sub my_save {
   my $appendop = $do_append ? ">" : "";
   my $opn;
   my $hdl;
-  # file might not recognize some files!
   if ($f =~ /\.gz$/) {
     $opn = "| gzip -c >$appendop $f";
   } elsif ($f =~ /\.bz2$/) {
