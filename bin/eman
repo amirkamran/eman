@@ -3907,6 +3907,17 @@ Examples:
   # clone the top step (and unusable predecessors) replacing VAR
   # with some new value x
 
+  eman redo SPEC --start --outdate
+  # redo all failed/outdated steps, mark them as outdated
+
+  eman td SPEC --stat
+  # see what all was derived (by redo or clone) from SPEC
+  # useful e.g. for chasing redone experiments and finding the last one
+
+  eman annotate --stat < my-notes.txt > new-notes.txt
+  # change "s.anything.123 (anything)" into "s.anything.123 (RUNNING)"
+  # useful for making your notes up-to-date
+
   eman abolish `eman select t STEPTYPE f`
   # remove all content files of all failing steps of a STEPTYPE
 
@@ -4123,7 +4134,7 @@ predict the requirements on disk and memory and output a string such as:
 
   --mem 30g --disk 100g
 
-Th output would be used as additional arguments for eman start/continue.
+The output would be used as additional arguments for eman start/continue.
 
 The script would be optional and command-line specified parameters would
 override its output.
