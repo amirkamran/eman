@@ -1596,6 +1596,8 @@ sub fold_back {
 
   my $deps = load_depsarr($step);
   foreach my $dep (@$deps) {
+    return $aku if $ignore{$step} || $ignore{get_steptype($step)};
+      # explicit skipping subtrees of individual steps or steps of a given type
     $aku = fold_back($dep, $sub, $aku);
   }
   return $sub->($step, $aku);
