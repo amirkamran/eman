@@ -32,6 +32,7 @@ use Fcntl qw(LOCK_EX LOCK_NB);
 # use File::NFSLock;
 use FindBin qw($Bin);
 use List::Util qw(min);
+use List::MoreUtils qw(uniq);
 my $eman = $Bin."/".basename($0); # full path to ourselves
 
 binmode(STDIN, ":utf8");
@@ -167,6 +168,7 @@ my @userholds = (); # SGE jobids to wait for
 # the 'environment' used to interpret qsub flags
 my $env = "ufal"; # SGE environment (used for option mapping)
 my $hostname = `hostname`;
+my $anonymize = 0; # anonymize traceback
 if ($hostname =~ /^cluster-cn-/i) {
   $env = "rwth";
 }
@@ -222,6 +224,7 @@ my %options = (
   "nolazy|no-lazy!" =>\$nolazy,
   "remote!" =>\$remote,
   "dir|show-dir!" =>\$showdir,
+  "anonymize!" =>\$anonymize,
 );
 GetOptions(%options) or exit 1;
 
@@ -1939,9 +1942,11 @@ sub print_short {
 sub print_vars {
   my $prefix = shift;
   my $s = shift;
+  my $seenseeds = shift;
+  my @depsinvars = ();
   my $v = load_vars_str($s);
   return if !defined $v;
-  foreach my $l (split /\n/, $v) {
+  foreach my $l (sort(split /\n/, $v)) {
     # perform substitutions, if defined and step not reused
     if (defined $subst && ! $reuse{$s}) {
       foreach my $s (@$subst) {
@@ -1951,8 +1956,24 @@ sub print_vars {
         eval '$l =~ s'.$s;
       }
     }
+    if ($anonymize) {
+      my $stepstr = $dirprefix . get_steptype($s) . "." . $seenseeds->{$s};
+      $l =~ s/$s/$stepstr/g; # replace occurrences of step name with its canonical identifier
+      while ($l =~ m/\Q$dirprefix\E([^\.]*)\.([a-f0-9]{8}\.\d{8}-\d{4})/g) {
+        my $steptype = $1;      
+        my $step = "$dirprefix$1.$2";
+        push @depsinvars, $step if ! grep { $_ eq $step } @depsinvars;
+        if (! defined $seenseeds->{$step}) {
+          my $anonstepnum = 1 + grep { $_ =~ m/^$dirprefix$steptype/ } keys %$seenseeds;
+          $seenseeds->{$step} = $anonstepnum;
+        }
+        my $replace = $dirprefix . $steptype . "." . $seenseeds->{$step};
+        $l =~ s/$step/$replace/;
+      }
+    }
     print "$prefix$l\n";
   }
+  return \@depsinvars;
 }
 sub print_log {
   my $prefix = shift;
@@ -1985,9 +2006,13 @@ sub traceback_to_recipe {
 sub print_details_in_tracebacks {
   my $prefix = shift;
   my $step = shift;
+  my $seenseeds = shift;
 
+  my $stepstr = $anonymize ?
+    $dirprefix . get_steptype($step) . "." . $seenseeds->{$step} :
+    $step;
   my $indent = $show_tree_in_traceback ? "+- " : "";
-  print "$prefix$indent$step\n";
+  print "$prefix$indent$stepstr\n";
   my @kws; # space-delimited keywords
   if ($show_jobid) {
     my $jid = load_jobid($step);
@@ -1998,32 +2023,40 @@ sub print_details_in_tracebacks {
   push @kws, compiled_tag_string($step) || "" if $show_tag;
   $indent = $show_tree_in_traceback ? "|  | " : "";
   print $prefix.$indent."Job: @kws\n" if 0 < scalar @kws;
-  print_vars($prefix.$indent, $step) if $show_vars;
+  my $depsinvars = print_vars($prefix.$indent, $step, $seenseeds) if $show_vars;
   print_log($prefix.$indent, $step) if $show_log;
+  return $depsinvars;
 }
 
 sub traceback {
   my $prefix = shift;
   my $step = shift;
+  my $seenseeds = shift;
 
   return if $avoid{$step} || $ignore{$step};
     # explicit avoiding of individual steps
   return if $ignore{get_steptype($step)}; # avoiding steps of a given type
 
-  print_details_in_tracebacks($prefix, $step);
+  if (! defined $seenseeds->{$step}) {
+    my $steptype = get_steptype($step);
+#     print STDERR "Known steps: ", join(',', keys %$seenseeds), "\n" if $debug;
+    my $anonstepnum = 1 + grep { $_ =~ m/^$dirprefix$steptype/ } keys %$seenseeds;
+    $seenseeds->{$step} = $anonstepnum;
+  }
+  my $depsinvars = print_details_in_tracebacks($prefix, $step, $seenseeds) // [];
 
-  my $deps = load_depsarr($step);
+  my @deps = uniq( @$depsinvars, sort @{ load_depsarr($step) });
   # if this step is reused, all deps are also reused
   # (this is useful in 'tb -s')
   if ($reuse{$step}) {
-    foreach my $dep (@$deps) {
+    foreach my $dep (@deps) {
       $reuse{$dep} = 1;
     }
   }
   my $indent = $show_tree_in_traceback ? "|  " : "";
   return if !$recurse;
-  foreach my $dep (@$deps) {
-    traceback($prefix.$indent, $dep);
+  foreach my $dep (@deps) {
+    traceback($prefix.$indent, $dep, $seenseeds);
   }
 }
 
