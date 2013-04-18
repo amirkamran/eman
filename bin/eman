@@ -1011,6 +1011,10 @@ sub collect {
     # print STDERR "\n\n";
     foreach my $f (@files) {
       my $step = guess_stepname_from_pathname($f); #$f; $step =~ s/\/.*//;
+      if (!defined $step) {
+        print STDERR "Warning: Tried to collect from a directory that is not a step? Dirname: $f\n";
+	next;
+      }
       my $name_to_res = undef;
       my $cmd = undef;
       if ($regexorcmd =~ /^CMD:(.*)\$\$(.*)/) {
@@ -2047,18 +2051,23 @@ sub traceback {
   }
   my $depsinvars = print_details_in_tracebacks($prefix, $step, $seenseeds) // [];
 
-  my @deps = uniq( @$depsinvars, sort @{ load_depsarr($step) });
-  # if this step is reused, all deps are also reused
-  # (this is useful in 'tb -s')
-  if ($reuse{$step}) {
-    foreach my $dep (@deps) {
-      $reuse{$dep} = 1;
+  my $depsarr = load_depsarr($step);
+  if (defined $depsarr) {
+    my @deps = uniq( @$depsinvars, sort @$depsarr);
+    # if this step is reused, all deps are also reused
+    # (this is useful in 'tb -s')
+    if ($reuse{$step}) {
+      foreach my $dep (@deps) {
+        $reuse{$dep} = 1;
+      }
     }
-  }
-  my $indent = $show_tree_in_traceback ? "|  " : "";
-  return if !$recurse;
-  foreach my $dep (@deps) {
-    traceback($prefix.$indent, $dep, $seenseeds);
+    my $indent = $show_tree_in_traceback ? "|  " : "";
+    return if !$recurse;
+    foreach my $dep (@deps) {
+      traceback($prefix.$indent, $dep, $seenseeds);
+    }
+  } else {
+    print STDERR "Warning: failed to find deps of $step\n";
   }
 }
 
