@@ -491,7 +491,7 @@ if (! defined $idx || $cmd eq $reindex || $reindex) {
   foreach my $subdir (@subdirs) {
     print STDERR "Warning: remote playground '$subdir' does not exist.\n"
       if ! -e $subdir;
-    my @steps = lightglob("$subdir", "$dirprefix*.[0-9]*");
+    my @steps = lightglob("$subdir/$dirprefix*.[0-9]*");
     foreach my $s (@steps) {
       print STDERR "indexing $s\n" if $debug;
       next if defined $idx->{basename($s)."path"}; # && defined $idx->{$s."jid"};
@@ -792,7 +792,7 @@ if ($cmd eq "abolish") {
     my $s = canon_stepdir($step);
       # abolish is pickier wrt to input, so no guessing
     chdir_to_stepdir($s);
-    for my $f (glob("*")) {
+    for my $f (lightglob("*")) {
       next if $f =~ /^eman\./;
       next if $f =~ /^log\./;
       if (-d $f) {
@@ -1005,7 +1005,7 @@ sub collect {
   foreach my $line (split /\n/, $resconf) {
     my ($name, $glob, $regexorcmd) = map { s/^ +//; s/ +$//; $_ }
                                      split /\t/, $line;
-    my @files = ( map { lightglob($_, $glob) } @subdirs);
+    my @files = ( map { glob("$_/$glob") } @subdirs);
     # print STDERR "$name ($glob): $regexorcmd\n";
     # print STDERR join("\n", @files);
     # print STDERR "\n\n";
@@ -2448,7 +2448,7 @@ sub guess_step {
     # guess from dir listing
     my @dirs;
     for my $subdir (@subdirs) {
-      push @dirs, grep { /$key/ } lightglob($subdir, "$dirprefix*.*.[0-9]*");
+      push @dirs, grep { /$key/ } glob("$subdir/$dirprefix*.*.[0-9]*");
     }
     # we do not use the preloaded index, because it contains only valid exps.
     if (1<scalar(@dirs)) {
@@ -3602,29 +3602,33 @@ sub my_save {
 # from Perl Cookbook:
 # http://docstore.mik.ua/orelly/perl4/cook/ch06_10.htm
 sub glob2pat {
-    my $globstr = shift;
-    my %patmap = (
-        '*' => '.*',
-        '?' => '.',
-        '[' => '[',
-        ']' => ']',
-    );
-    $globstr =~ s{(.)} { $patmap{$1} || "\Q$1" }ge;
-    $globstr =~ s/\\-/-/g;
-    return '^' . $globstr . '$';
+  my $globstr = shift;
+  my %patmap = (
+    '*' => '.*',
+    '?' => '.',
+    '[' => '[',
+    ']' => ']',
+  );
+  $globstr =~ s{(.)} { $patmap{$1} || "\Q$1" }ge;
+  $globstr =~ s/\\-/-/g;
+  return '^' . $globstr . '$';
 }
 
 sub lightglob {
-  my ($dir, $wildcard) = @_;
-  print STDERR "lightglob($dir, $wildcard)\n" if $debug;
-  opendir(my $dh, $dir) or confess "Failed to open dir: $dir";
-  my $pattern = glob2pat($wildcard);
-  print STDERR "Regex pattern: $pattern\nReading $dir... " if $debug;
+  my ($wildcard, $current) = @_;
+  $current = "/" if ! $current;
+  print STDERR "lightglob($wildcard, $current)\n" if $debug;
+  $wildcard =~ s#/?([^/]*)/?(.*)#$2#;
+  my $pattern = glob2pat($1);
+  opendir(my $dh, $current) or confess "Failed to open dir: $current";
+  print STDERR "Regex pattern: $pattern\nReading $current... " if $debug;
   my @list = grep { $_ =~ m/^$pattern$/ } readdir $dh;
-  print STDERR "done\n" if $debug;
-  print STDERR "Found ", scalar(@list), " matching directories\n" if $debug;
+  if ($wildcard) {
+    @list = map { lightglob($wildcard, "$current/$_") if -d "$current/$_" } @list;
+  }
+  print STDERR "Found ", scalar(@list), " matches\n" if $debug;
   closedir $dh;
-  return map { "$dir/$_" } @list;
+  return map { "$current/$_" } @list;
 }
 
 sub safesystem {
