@@ -491,7 +491,7 @@ if (! defined $idx || $cmd eq $reindex || $reindex) {
   foreach my $subdir (@subdirs) {
     print STDERR "Warning: remote playground '$subdir' does not exist.\n"
       if ! -e $subdir;
-    my @steps = lightglob("$subdir/$dirprefix*.[0-9]*");
+    my @steps = glob("$subdir/$dirprefix*.[0-9]*");
     foreach my $s (@steps) {
       print STDERR "indexing $s\n" if $debug;
       next if defined $idx->{basename($s)."path"}; # && defined $idx->{$s."jid"};
@@ -792,7 +792,7 @@ if ($cmd eq "abolish") {
     my $s = canon_stepdir($step);
       # abolish is pickier wrt to input, so no guessing
     chdir_to_stepdir($s);
-    for my $f (lightglob("*")) {
+    for my $f (glob("*")) {
       next if $f =~ /^eman\./;
       next if $f =~ /^log\./;
       if (-d $f) {
