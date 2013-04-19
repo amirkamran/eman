@@ -146,7 +146,7 @@ my $maindir = undef; # the path of the directory with seeds, steps etc.
                      # guessed using chdir_to_maindir
 
 my $qsub_available = undef;
-my $nolazy = 0; # do not update index by default
+my $hard_reindex = 0; # do not update the whole index by default
 my $remote = 0; # do not list remote steps by default
 my $showdir = 0; # show directory (alias) for remote steps
 
@@ -221,7 +221,7 @@ my %options = (
   "limit|l=s@"=>\@limits, # format, e.g.: h_stack=30M
   "hold=s@"=>\@userholds, # format: 123456
   "subdir=s"=>\$subdir,
-  "nolazy|no-lazy!" =>\$nolazy,
+  "hard!" =>\$hard_reindex,
   "remote!" =>\$remote,
   "dir|show-dir!" =>\$showdir,
   "anonymize!" =>\$anonymize,
@@ -476,7 +476,7 @@ if ($readonly || $autoreadonly
 
 # Load and update index, possibly also saving it
 my $idx;
-if ($cmd eq "reindex" || $reindex) {
+if (($cmd eq "reindex" || $reindex) && $hard_reindex) {
   # do not load any saved values
 } else {
   $idx = loadidx();
@@ -486,12 +486,12 @@ my $autotag_rules = undef; # to be loaded by load_autotag_rules("eman.autotags")
 # autotag_rules->{steptype} = [ [list of regexes producing one tag],
 #   [list of regexes producing another tag] ]
 
-if (! defined $idx || $nolazy) {
+if (! defined $idx || $cmd eq $reindex || $reindex) {
   print STDERR "Updating index\n" if $debug;
   foreach my $subdir (@subdirs) {
     print STDERR "Warning: remote playground '$subdir' does not exist.\n"
       if ! -e $subdir;
-    my @steps = lightglob("$subdir", "$dirprefix*.[0123456789]*");
+    my @steps = lightglob("$subdir", "$dirprefix*.[0-9]*");
     foreach my $s (@steps) {
       print STDERR "indexing $s\n" if $debug;
       next if defined $idx->{basename($s)."path"}; # && defined $idx->{$s."jid"};
@@ -2439,7 +2439,7 @@ sub guess_step {
     # guess from dir listing
     my @dirs;
     for my $subdir (@subdirs) {
-      push @dirs, grep { /$key/ } lightglob($subdir, "$dirprefix*.*.[0123456789]*");
+      push @dirs, grep { /$key/ } lightglob($subdir, "$dirprefix*.*.[0-9]*");
     }
     # we do not use the preloaded index, because it contains only valid exps.
     if (1<scalar(@dirs)) {
@@ -3601,6 +3601,7 @@ sub glob2pat {
         ']' => ']',
     );
     $globstr =~ s{(.)} { $patmap{$1} || "\Q$1" }ge;
+    $globstr =~ s/\\-/-/g;
     return '^' . $globstr . '$';
 }
 
