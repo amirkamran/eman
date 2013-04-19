@@ -146,7 +146,7 @@ my $maindir = undef; # the path of the directory with seeds, steps etc.
                      # guessed using chdir_to_maindir
 
 my $qsub_available = undef;
-my $hard_reindex = 0; # do not update the whole index by default
+my $hard_reindex = 1; # update the whole index
 my $remote = 0; # do not list remote steps by default
 my $showdir = 0; # show directory (alias) for remote steps
 
