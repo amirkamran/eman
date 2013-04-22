@@ -64,6 +64,7 @@ my %expand_abbrev = qw(
   init init
   run run
   cont continue
+  clean clean
   users users
   reindex reindex
   redo redo
@@ -836,6 +837,31 @@ if ($cmd eq "continue") {
   save("eman.status", "PREPARED"); # fake our status
   $waserror = ! submit($s);
   exit $waserror;
+}
+
+if ($cmd eq "clean") {
+  my $step = shift;
+  mydie "usage: eman run STEPDIR" if ! defined $step;
+  my $s = guess_step($step); # happily guess the exact step
+  chdir_to_stepdir($s);
+  # Avoid destroying contents of RUNNING and DONE steps!
+  my $stat = load_status($s);
+  mydie "Only FAILED steps can be cleaned."
+    if $stat ne "FAILED";
+  # Keep files named eman* and log*. Erase everything else to pave way for eman continue if re-running of eman.command would not be safe otherwise.
+  opendir(DIR, '.') or die("Cannot read folder contents");
+  my @files = readdir(DIR);
+  closedir(DIR);
+  foreach my $file (@files)
+  {
+    next if($file =~ m/^(\.|eman|log)/);
+    #print STDERR ("Removing $s/$file...\n");
+    safesystem("rm -rf $file") or die("Cannot remove $s/$file: $!");
+  }
+  # Note that we may have removed files that are created between the INITED and PREPARED states.
+  # So we should revert the step state to INITED.
+  # It also means that we will have to re-run it using 'eman start', not 'eman continue'.
+  safesystem("echo INITED > eman.status") or die("Cannot change status to INITED");
 }
 
 if ($cmd eq "start") {
@@ -3704,6 +3730,8 @@ eman, experiment manager
   eman prepare SPEC          # prepare inited step
   eman run SPEC              # run prepared step
   eman continue SPEC         # continue a single step that failed
+  eman clean SPEC            # erase files other than eman* and log* to make
+                             # the step reentrant and 'eman continue' safe
   eman start EXPSPEC         # prepare and run, incl. all predecessors
     --priority -200          #   cluster scheduling priority (default: -100)
     --mem 15g                #   required memory (default: 6g)
