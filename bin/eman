@@ -11,7 +11,7 @@
 #       should be also removing the exp's old name before renaming
 #       should include env vars in vars when cloning from scenario
 #       we need to find the equivalent for -CSAD to accept unicode
-#         chars as arguments
+#       chars as arguments
 
 use strict;
 use warnings;
@@ -64,6 +64,7 @@ my %expand_abbrev = qw(
   init init
   run run
   cont continue
+  clean clean
   users users
   reindex reindex
   redo redo
@@ -648,7 +649,7 @@ if ($cmd eq "deps") {
   $lock->unlock() if defined $lock;
   for my $spec (@ARGV) {
     my $step = guess_step($spec);
-    my @deps = split "\n", 
+    my @deps = split "\n",
       try_load(absolutize_within_stepdir($step, "eman.deps"));
     for my $dep (@deps) {
       print_short($dep);
@@ -856,6 +857,31 @@ if ($cmd eq "continue") {
   save("eman.status", "PREPARED"); # fake our status
   $waserror = ! submit($s);
   exit $waserror;
+}
+
+if ($cmd eq "clean") {
+  my $step = shift;
+  mydie "usage: eman run STEPDIR" if ! defined $step;
+  my $s = guess_step($step); # happily guess the exact step
+  chdir_to_stepdir($s);
+  # Avoid destroying contents of RUNNING and DONE steps!
+  my $stat = load_status($s);
+  mydie "Only FAILED steps can be cleaned."
+    if $stat ne "FAILED";
+  # Keep files named eman* and log*. Erase everything else to pave way for eman continue if re-running of eman.command would not be safe otherwise.
+  opendir(DIR, '.') or die("Cannot read folder contents");
+  my @files = readdir(DIR);
+  closedir(DIR);
+  foreach my $file (@files)
+  {
+    next if($file =~ m/^(\.|eman|log)/);
+    #print STDERR ("Removing $s/$file...\n");
+    safesystem("rm -rf $file") or die("Cannot remove $s/$file: $!");
+  }
+  # Note that we may have removed files that are created between the INITED and PREPARED states.
+  # So we should revert the step state to INITED.
+  # It also means that we will have to re-run it using 'eman start', not 'eman continue'.
+  safesystem("echo INITED > eman.status") or die("Cannot change status to INITED");
 }
 
 if ($cmd eq "start") {
@@ -1583,7 +1609,7 @@ sub do_wait {
   # wait for all given steps
   my $step_specs = shift;
   my $waserror = 0;
-  
+
   my %steps = map { my $s = guess_step($_); ($s, load_status($s)) }
                 @$step_specs;
   # check if any steps have no chance
@@ -1778,8 +1804,8 @@ sub submit {
     # add all job holds
     push @opts, map {('-hold_jid', $_)} @userholds;
 
-    
-    
+
+
     #check for multi-core support
     my $real_cores = $cores // $vars_hash->{EMAN_CORES} // $qsub_defaults{cores};
     if ((defined $real_cores) && ($real_cores!=1)) {
@@ -1790,8 +1816,8 @@ sub submit {
     # Log the command, too. If we ever need to restart the job we will want to know the original memory+disk requirements.
     # (SGE stores the requirements in the epilog text but the job may die without ever writing the epilog.)
     my $jobname = shorten_name($s);
-   
-    
+
+
     my $qsub_command = "qsub -C '' $sgeholdsstr -N $jobname -o log.o\\\$JOB_ID @opts ./eman.command";
     open(LOG, '>log') or die("Cannot write log: $!");
     print LOG ("$qsub_command\n");
@@ -1986,7 +2012,7 @@ sub print_vars {
       my $stepstr = $dirprefix . get_steptype($s) . "." . $seenseeds->{$s};
       $l =~ s/$s/$stepstr/g; # replace occurrences of step name with its canonical identifier
       while ($l =~ m/\Q$dirprefix\E([^\.]*)\.([a-f0-9]{8}\.\d{8}-\d{4})/g) {
-        my $steptype = $1;      
+        my $steptype = $1;
         my $step = "$dirprefix$1.$2";
         push @depsinvars, $step if ! grep { $_ eq $step } @depsinvars;
         if (! defined $seenseeds->{$step}) {
@@ -2676,7 +2702,7 @@ sub get_hash_from_vars_deps {
   my $name = shift;
   my $vars = shift;
   my $deps = shift;
-  
+
     # deps are totally ignored, we assume they are implied by vars
   # avoid considering the name of ourselves significant in content check
   my @usevars = @$vars;
@@ -3403,7 +3429,7 @@ sub filter_steps
             when ("br")
             {
               # generator function provides step dependencies
-              @steps = grep {   
+              @steps = grep {
                 recfilter(
                   $_,
                   sub { return filter_steps($_[0], @args) },
@@ -3724,6 +3750,8 @@ eman, experiment manager
   eman prepare SPEC          # prepare inited step
   eman run SPEC              # run prepared step
   eman continue SPEC         # continue a single step that failed
+  eman clean SPEC            # erase files other than eman* and log* to make
+                             # the step reentrant and 'eman continue' safe
   eman start EXPSPEC         # prepare and run, incl. all predecessors
     --priority -200          #   cluster scheduling priority (default: -100)
     --mem 15g                #   required memory (default: 6g)
@@ -3790,23 +3818,23 @@ STEPTYPE specifies the seed to be used, e.g. 'align'.
 
 Command aliases:
 
-  abolish      rm 
-  clone        cl 
-  continue     cont  
-  duplicates   dups 
-  list         ls 
-  prepare      pr 
-  prepare      prep 
-  retag        retag 
-  select       sel 
-  start        st 
-  status       stat 
-  tabulate     tab 
-  traceback    tb 
-  traceback    tr 
-  traceforward tf 
-  traceforward traceusers 
-  traceforward tu 
+  abolish      rm
+  clone        cl
+  continue     cont
+  duplicates   dups
+  list         ls
+  prepare      pr
+  prepare      prep
+  retag        retag
+  select       sel
+  start        st
+  status       stat
+  tabulate     tab
+  traceback    tb
+  traceback    tr
+  traceforward tf
+  traceforward traceusers
+  traceforward tu
 
 Eman is an experiment manager, useful mainly for deriving steps and
 step chains, i.e. complex experiment scenarios.
@@ -3966,7 +3994,7 @@ You can use the following filters in eman select:
                        (current user, any cluster job status)
   u <criteria>     ... only steps that have at least one user with given
                        properties; rest of query defines the user
-  br <criteria>    ... only steps that have at least one (transitive) predecessor 
+  br <criteria>    ... only steps that have at least one (transitive) predecessor
                        with given properties (backward recursion)
   fr <criteria>    ... only steps that have at least one (transitive) successor
                        with given properties (forward recursion)
@@ -4038,7 +4066,7 @@ Examples:
   # all 'evaluator' steps which use a language model trained on MYCORPUS
 
   eman sel t tm not fr t evaluator
-  # all 'tm' steps which have not been evaluated (i.e. not step of type 
+  # all 'tm' steps which have not been evaluated (i.e. not step of type
   # 'evaluator' transitively depends on them)
 
   eman sel f br vre 'ALICORP=.*un.*'
@@ -4050,7 +4078,7 @@ Examples:
   # evaluator step
 
   eman ls > steps-all.txt
-  eman traceback --no-tree \
+  eman traceback --notree \
     `qstat | grep $USER | grep -P '\ss\.' | cut -d' ' -f1 | grep -v 4296093` \
     | sort -u > steps-tabu.txt
   perl -e '
@@ -4059,14 +4087,14 @@ Examples:
     open(ALL, "steps-all.txt") or die;
     while(<ALL>) { print unless($tabu{$_}) }' > steps-free.txt
   for i in `cat steps-free.txt` ; do
-    echo $i ; cp -r $i /net/cluster/TMP/$USER/new_playground 
+    echo $i ; cp -r $i /net/cluster/TMP/$USER/new_playground
   done
   for i in `cat steps-free.txt` ; do echo $i ; rm -rf $i ; done
   # I want to move the playground to another disk because I am hitting the
-  # quota. But I need to know first which steps are running or prerequisities 
-  # of something running (immovable at the moment). Note the "grep -v 4296093" 
+  # quota. But I need to know first which steps are running or prerequisities
+  # of something running (immovable at the moment). Note the "grep -v 4296093"
   # above. Eman will die if any of the running jobs don't match a known step.
-  # (BEWARE: Copying steps will also separate numerous hardlinks we have there. 
+  # (BEWARE: Copying steps will also separate numerous hardlinks we have there.
   # The target disk usage will be much higher until we rejoin the hardlinks
   # again or erase them.)
 
