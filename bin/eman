@@ -120,6 +120,7 @@ my $notree = 0; # set to 1 to avoid tree (indented) output in eman traceback
 my $add_tag = undef; # for newly inited steps, add the given tags
 my $subst = undef;
 my $substvar = undef;
+my $appendvar = undef;
 my $avoid = undef;
 my $avoid_more = undef; # corresponds to --redo
 my $reuse = undef;
@@ -199,6 +200,7 @@ my %options = (
   "read-only|readonly!" => \$readonly,
   "s|substitute=s@" => \$subst,
   "sv|substitute-var=s@" => \$substvar,
+  "av|append-var=s@" => \$appendvar,
   "avoid=s@" => \$avoid,
   "reuse=s@" => \$reuse,
   "redo=s@" => \$avoid_more,
@@ -234,6 +236,24 @@ my $show_tree_in_traceback = ! $notree;
 foreach my $sv (@$substvar) {
   my $varname = $sv; $varname =~ s/=.*//;
   push @$subst, "/^$varname=.*/$sv/";
+}
+# interpret appendvar VAR=x as subst /^VAR=(.*)/VAR=$1x/
+foreach my $av (@$appendvar) {
+  my ($varname, $appendvalue) = split /=/, $av, 2;
+
+  if ($appendvalue =~ /[" ]/) {
+    # needed to escape
+    $appendvalue =~ s/^"(.*)"$/$1/;
+    push @$subst, "/^$varname=([^\"]*)/$varname=\":\$1$appendvalue\"/";
+      # old did not need, but new value needs to escape
+    push @$subst, "/^$varname=\"(.*)\"/$varname=\"\$1$appendvalue\"/";
+      # old needs wrapping, so let's do it
+  } else {
+    push @$subst, "/^$varname=([^\"]*)/$varname=\$1$appendvalue/";
+      # neither old nor new value need wrapping
+    push @$subst, "/^$varname=\"(.*)\"/$varname=\"\$1$appendvalue\"/";
+      # old needs wrapping, so let's do it
+  }
 }
 
 # colorize regex outputs if substituting and output is terminal (or wished)
