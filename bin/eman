@@ -3054,7 +3054,7 @@ sub scan {
       $showvalue = $cols[0];
     } elsif ($self->{show} eq "%S") {
       $showvalue = $cols[0];
-      $showvalue =~ s/^\E$dirprefix\Q[-_a-z9-0]+\.//;
+      $showvalue =~ s/^\Q$dirprefix\E[-_a-z9-0]+\.//;
     } elsif ($self->{show} eq "%t") {
       $showvalue = $cols[1];
     }
