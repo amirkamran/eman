@@ -70,7 +70,7 @@ my %expand_abbrev = qw(
   redo redo
   wait wait
   fail fail
-  outdate outdate
+  outd outdate
   dups duplicates
   guess guess
   qstat qstat
@@ -773,7 +773,7 @@ if ($cmd eq "get-var") {
   exit $waserror;
 }
 
-if ($command eq "fail") {
+if ($cmd eq "fail") {
   mydie "usage: eman fail SPEC ..." if 0 == scalar @ARGV;
   foreach my $key (@ARGV) {
     my $step = guess_step($key);
@@ -784,7 +784,7 @@ if ($command eq "fail") {
   exit $waserror;
 }
 
-if ($command eq "succeed") {
+if ($cmd eq "succeed") {
   mydie "usage: eman succeed SPEC ..." if 0 == scalar @ARGV;
   foreach my $key (@ARGV) {
     my $step = guess_step($key);
@@ -795,7 +795,7 @@ if ($command eq "succeed") {
   exit $waserror;
 }
 
-if ($command eq "outdate") {
+if ($cmd eq "outdate") {
   mydie "usage: eman outdate SPEC ..." if 0 == scalar @ARGV;
   foreach my $key (@ARGV) {
     my $step = guess_step($key);
@@ -990,7 +990,7 @@ if ($cmd eq "clone") {
   exit $waserror;
 }
 
-if ($command eq "redo") {
+if ($cmd eq "redo") {
   my $step = shift;
   mydie "usage: eman redo STEPDIR" if ! defined $step;
   my $s = guess_step($step); # happily guess the exact step
