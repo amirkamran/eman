@@ -236,7 +236,7 @@ my $show_tree_in_traceback = ! $notree;
 # interpret substvar VAR=x as subst /^VAR=.*/VAR=x/
 foreach my $sv (@$substvar) {
   my $varname = $sv; $varname =~ s/=.*//;
-  push @$subst, "/^$varname=.*/$sv/";
+  push @$subst, "/^$varname=.*/\Q$sv\E/";
 }
 # interpret appendvar VAR=x as subst /^VAR=(.*)/VAR=$1x/
 foreach my $av (@$appendvar) {
