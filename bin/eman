@@ -48,6 +48,7 @@ my %expand_abbrev = qw(
   cl clone
   tb traceback
   tr traceback
+  gr graph
   tf traceforward
   traceusers traceforward
   tu traceforward
@@ -308,7 +309,7 @@ my $lock = undef;
 # all subdirs need to be known before helper commands
 guess_maindir();
 my $oldwd = chdir_to_maindir();
-my $autoreadonly = ( !$reindex && $cmd =~ /^(traceback|vars|succeed|fail|status)$/ );
+my $autoreadonly = ( !$reindex && $cmd =~ /^(traceback|graph|vars|succeed|fail|status)$/ );
 $autoreadonly = 1 if defined $ENV{"EMAN_READONLY"};
   # don't warn if readonly mode came from env.vars
 
@@ -664,14 +665,15 @@ if ($cmd eq "duplicates") {
   exit $waserror;
 }
 
-if ($cmd eq "traceback") {
+#graph is essentially traceback
+if ($cmd eq "traceback" or $cmd eq "graph") {
   $lock->unlock() if defined $lock;
-  mydie "usage: eman traceback SPEC ..." if 0 == scalar @ARGV;
+  mydie "usage: eman $cmd SPEC ..." if 0 == scalar @ARGV;
   $show_vars = 1 if defined $subst && scalar (@$subst) > 0;
     # so that there is something to substitute
   foreach my $key (@ARGV) {
     my $step = guess_step($key);
-    traceback("", $step);
+    traceback("", $step, {}, ($cmd eq "graph"));
   }
   exit 0;
 }
@@ -2054,6 +2056,63 @@ sub traceback_to_recipe {
   return $recipe;
 }
 
+my %seensteps;
+sub print_graphviz_dependency {
+    my $step = shift;
+    my $dependent_step = shift;
+    my $orig_step = $step;
+    my $orig_dep = $dependent_step;
+
+    #do not print anything that leads to corpus
+    #this is to omit the not-very-useful clusters of corpus steps
+    if (get_steptype($orig_dep) eq "corpus") {
+        #die load_vars_str($orig_step);
+        return;
+    }
+
+    #corpus gets a special treatment
+    if (get_steptype($orig_step) =~ "corpus") {
+        
+        #first, find some data about corpus
+        my $vars=load_vars_str($orig_step);
+        my ($corpname) = $vars =~ /OUTCORP=(\S*)/ or die "weird corpus";
+        my ($corplang) = $vars =~ /OUTLANG=(..)/ or die "weird corpus";
+        my ($factor) = $vars =~ /OUTFACTS=(\S*)/ or die "weird corpus";
+        
+        #construct the name of the graphviz node 
+        my $stepname = "corp_".$corpname.$corplang.$factor;
+        $stepname =~ s/[\.\+-]/_/g;
+        
+        #print him to get the label right
+        if (!exists $seensteps{$stepname}) {
+                                    #\n, not a newline!
+            my $corp_label = "[".join('-\n',split(/-/, $corpname)).']\n'.$corplang.'\n'.$factor;
+            print "$stepname [label=\"$corp_label\", shape=\"box\"]\n";
+        }
+        $seensteps{$stepname}=1;
+        $step=$stepname;
+    } else {
+        
+        #construct the name of the graphviz node 
+        $step =~ s/[\.-]/_/g;
+        
+        #print him to get the label right
+        if (!exists $seensteps{$step}) {
+            print "$step [label=\"".get_steptype($orig_step)."\"]\n";
+        }
+        $seensteps{$step}=1;
+    }
+
+    $dependent_step =~ s/[\.-]/_/g;
+
+    if (!exists $seensteps{$dependent_step}) {
+        print "$dependent_step [label=\"".get_steptype($orig_dep)."\"]\n";
+    }
+    
+
+    print "$step -> $dependent_step\n";
+}
+
 sub print_details_in_tracebacks {
   my $prefix = shift;
   my $step = shift;
@@ -2083,10 +2142,20 @@ sub traceback {
   my $prefix = shift;
   my $step = shift;
   my $seenseeds = shift;
+  my $do_graph = shift;
+  my $dependent_step = shift;
+
 
   return if $avoid{$step} || $ignore{$step};
     # explicit avoiding of individual steps
   return if $ignore{get_steptype($step)}; # avoiding steps of a given type
+
+  if ($do_graph) {
+    #slightly hackish way of printing graph declaration at top/bottom of gv file
+    if (!defined $dependent_step) {
+        print "digraph eman {\n";
+    }
+  }
 
   if (! defined $seenseeds->{$step}) {
     my $steptype = get_steptype($step);
@@ -2094,7 +2163,15 @@ sub traceback {
     my $anonstepnum = 1 + grep { $_ =~ m/^$dirprefix$steptype/ } keys %$seenseeds;
     $seenseeds->{$step} = $anonstepnum;
   }
-  my $depsinvars = print_details_in_tracebacks($prefix, $step, $seenseeds) // [];
+  
+  my $depsinvars;
+  if ($do_graph){
+    #this is not needed with graph
+    $depsinvars = [];
+    print_graphviz_dependency($step, $dependent_step) if defined $dependent_step;
+  } else {
+    $depsinvars= print_details_in_tracebacks($prefix, $step, $seenseeds) // [];
+  }
 
   my $depsarr = load_depsarr($step);
   if (defined $depsarr) {
@@ -2109,10 +2186,16 @@ sub traceback {
     my $indent = $show_tree_in_traceback ? "|  " : "";
     return if !$recurse;
     foreach my $dep (@deps) {
-      traceback($prefix.$indent, $dep, $seenseeds);
+      traceback($prefix.$indent, $dep, $seenseeds, $do_graph, $step);
     }
   } else {
     print STDERR "Warning: failed to find deps of $step\n";
+  }
+
+  if ($do_graph) {
+    if (!defined $dependent_step) {
+        print " }\n";
+    }
   }
 }
 
