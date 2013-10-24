@@ -409,21 +409,39 @@ if ($cmd eq "defvar") {
     if (defined $vars->{$varname}->{'val'}) {
       # user specified the value
       $usevalue = $vars->{$varname}->{'val'};
-    } elsif (defined $vars->{$varname}->{'opt'}->{'inherit'}) {
+    } elsif (defined $vars->{$varname}->{'opt'}->{'inherit'}
+          or defined $vars->{$varname}->{'opt'}->{'firstinherit'}) {
       # value can be inherited from a particular step
-      my $stepvar = $vars->{$varname}->{'opt'}->{'inherit'};
+      my $inh_type = (defined $vars->{$varname}->{'opt'}->{'inherit'})?"inherit":"firstinherit"; 
+      
+      my $stepvar = $vars->{$varname}->{'opt'}->{$inh_type};
       my ($stepname, $fromvar) = split ':', $stepvar;
-      if (!defined $vars->{$stepname}->{'opt'}->{'type'}
-          || ($vars->{$stepname}->{'opt'}->{'type'} ne 'reqstep'
-          && $vars->{$stepname}->{'opt'}->{'type'} ne 'optstep')) {
-        $varshelp .= "    !!! $stepname is not a step\n";
-        $waserror = 1;
+      if ($inh_type eq "inherit") {
+        if (!defined $vars->{$stepname}->{'opt'}->{'type'}
+            || ($vars->{$stepname}->{'opt'}->{'type'} ne 'reqstep'
+            && $vars->{$stepname}->{'opt'}->{'type'} ne 'optstep')) {
+            $varshelp .= "    !!! $stepname is not a step\n";
+            $waserror = 1;
+        }
+      } else {
+        if (!defined $vars->{$stepname}->{'opt'}->{'type'}
+            || ($vars->{$stepname}->{'opt'}->{'type'} ne 'steplist')) {
+            $varshelp .= "    !!! $stepname is not a steplist\n";
+            $waserror = 1;
+        }
       }
       $fromvar = $varname if ! defined $fromvar;
       if (defined $outvars->{$stepname}) {
         # the error message when undefined not necessary, the
         # outvar->{stepname} will complain anyway
-        my $parent_vars_str = load_vars_str($outvars->{$stepname});
+        
+        my $step_to_inh_from;
+        if ($inh_type eq "inherit" ){
+            $step_to_inh_from = $outvars->{$stepname};
+        } else {
+            $step_to_inh_from = (split(/:/, $outvars->{$stepname}))[0];
+        }
+        my $parent_vars_str = load_vars_str($step_to_inh_from);
         if (defined $parent_vars_str) {
           my ($var) = grep { $_ =~ m/^$fromvar=/ }
                       split(/\n/, $parent_vars_str);
@@ -460,7 +478,17 @@ if ($cmd eq "defvar") {
             $waserror = 1;
           }
         }
-      }
+        if ($type eq "steplist") {
+          my @list = split (/:/, $usevalue);
+          for my $single_step (@list) {
+            $deps{$single_step} = 1;
+            if (!step_valid($single_step)) {
+                $varshelp .= "    !!! $single_step is not a valid step\n";
+                $waserror = 1;
+            }
+          }
+        }
+     }
     } else {
       # value missed
       $varshelp .= "    !!! $varname was not defined.\n";
@@ -2065,7 +2093,7 @@ sub print_graphviz_dependency {
 
     #do not print anything that leads to corpus
     #this is to omit the not-very-useful clusters of corpus steps
-    if (get_steptype($orig_dep) eq "corpus") {
+    if (get_steptype($orig_dep) =~ "corpus") {
         #die load_vars_str($orig_step);
         return;
     }
