@@ -15,6 +15,8 @@
 
 use strict;
 use warnings;
+use utf8;
+use Encode qw(encode_utf8);
 use 5.010;
 use YAML::XS;
 use File::Temp qw/tempfile/;
@@ -38,6 +40,14 @@ my $eman = $Bin."/".basename($0); # full path to ourselves
 binmode(STDIN, ":utf8");
 binmode(STDOUT, ":utf8");
 binmode(STDERR, ":utf8");
+# interpret all env. vars as UTF-8
+foreach ( keys ( %ENV ) )
+{
+  # The following line would be for untainting, but we actually pass commands
+  # and other ugly stuff in using environment variables...
+  # $ENV{$_} = $1 if $ENV{$_} =~ /^([^;{}"`|&<>\n\r]*)$/;
+  utf8::decode ( $ENV{$_} );
+}
 
 # command name abbreviations, identities provided for commands with no abbrevs
 my %expand_abbrev = qw(
@@ -2825,7 +2835,7 @@ sub get_hash_from_vars_deps {
     @usevars;
   # include steptype in the hash to distinguist vars-less steps
   my $steptype = get_steptype($name);
-  my $hash =  md5_hex($steptype, sort @usevars);
+  my $hash =  md5_hex(map {encode_utf8($_)} ($steptype, sort @usevars));
   print STDERR "STEPTYPE $steptype, USEVARS: @usevars\n  -> $hash\n" if 1 && $debug;
   return $hash;
 }
