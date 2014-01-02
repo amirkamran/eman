@@ -1956,16 +1956,8 @@ sub list {
     # filter out remote steps, unless:
     # 1) --remote was specified, or
     # 2) the user asked for a particular step (e.g. eman stat s.srilm.123)
-    #
-    # XXX hack: eman select calls list() with fully specified step names,
-    # so we filter remote steps even when they are fully specified *if*
-    # the command was "eman select"
-    if (! $remote && ($cmd eq "select" || ! $requested_by_spec{$s})) {
-      # do not list remote steps by default
-      my $steppath = $idx->{$s . "path"};
-      $steppath =~ s/$s//; # remove step name from path
-      next if abs_path($steppath) ne abs_path($maindir);
-    }
+    next if ! $remote && ! $requested_by_spec{$s} && is_remote($s);
+
     print_short($s);
   }
   my $ok = 1;
@@ -1974,6 +1966,13 @@ sub list {
     print STDERR "No steps of type: $req\n";
   }
   return $ok;
+}
+
+sub is_remote {
+  my $s = shift;
+  my $steppath = $idx->{$s . "path"};
+  $steppath =~ s/$s//; # remove step name from path
+  return abs_path($steppath) ne abs_path($maindir);
 }
 
 sub annotate_replace {
@@ -3413,12 +3412,14 @@ sub filter_steps
             when ("p") { @steps = grep { load_status($_) eq 'PREPARED' } @steps; }
             # Only RUNNING steps.
             when ("r") { @steps = grep { load_status($_) eq 'RUNNING' } @steps; }
+            # Only OUTDATED steps.
+            when ("o") { @steps = grep { load_status($_) eq 'OUTDATED' } @steps; }
             # Only last n steps (order defined by compare_steps() called above).
             # (In fact it is the reversed order because we take the first n elements of the array.)
             when ("l")
             {
                 my $n = get_eman_select_arg(\@args);
-                @steps  = @steps[0 .. min($n - 1, $#steps)];
+                @steps = @steps[0 .. min($n - 1, $#steps)];
             }
             # Only last 10 steps.
             when ("lh") { @steps = @steps[0 .. min(9, $#steps)]; }
@@ -3515,12 +3516,12 @@ sub filter_steps
               } @steps;
               splice(@args); # already used to filter the user-steps
             }
-            # only remote/subdir steps
+            # only remote/subdir steps 
+            # (we rely on select_steps to take care of setting the implied --remote flag)
             when ("remote")
             {
               guess_maindir();
-              @steps = grep { ! -d "$maindir/$_" } @steps;
-              $remote = 1;
+              @steps = grep { is_remote($_) } @steps;
             }
             # only steps created on given date (YYYYMMDD)
             when ("date")
@@ -3587,7 +3588,17 @@ sub recfilter {
 
 sub select_steps {
   my @args = @_;
-  my @steps = grep { $_ !~ m/(jid|path)/ } all_steps();
+  my @steps = grep { step_valid($_) } all_steps();
+
+  # if the user wants *only* remote steps, 
+  # they probably want to see them in the output
+  $remote = 1 if grep { /^remote$/ } @args;
+
+  # let's not consider remote steps at all unless --remote
+  # (this would confuse e.g. eman select l 10)
+  if (! $remote) {
+    @steps = grep { ! is_remote($_) } @steps;
+  }
   @steps = filter_steps(\@steps, @args);
   if ($steps[0]) {
     # all_steps() could have returned also NONEXISTENT steps (missing folder but the step mentioned as a dependency of another step).
@@ -4087,19 +4098,22 @@ playground.
 You can use the following filters in eman select:
 
   t <type>         ... only steps of type <type>
-  l <count>        ... latest <count> steps
-  lh               ... latest 10 steps
   d                ... only DONE steps
   f                ... only FAILED steps
-  r                ... only RUNNING steps
-  p                ... only PREPARED steps
   i                ... only INITED steps
+  p                ... only PREPARED steps
+  o                ... only OUTDATED steps
+  r                ... only RUNNING steps
   s <status>       ... only steps with status <status>
   v <VAR>=<value>  ... only steps with variable <VAR> that
                        has value <value>
   vre <regex>      ... only steps where the variable matches <regex>
                        (the expression can contain the name of the variable)
   tre <regex>      ... only steps where tags (incl. autotags) match <regex>
+  l <count>        ... latest <count> steps (according to timestamp,
+                       i.e. order of steps created within the same minute
+                       in undefined)
+  lh               ... latest 10 steps
   nq               ... only steps not currently known to qstat
                        (current user, any cluster job status)
   u <criteria>     ... only steps that have at least one user with given
@@ -4110,7 +4124,7 @@ You can use the following filters in eman select:
                        with given properties (forward recursion)
   not              ... negation of the remaining filters
                        e.g. eman select not d
-  remote           ... only remote steps
+  remote           ... only remote steps, implies --remote
   date <date>      ... only steps created on <date> (yyyymmdd)
   today            ... only steps created today
 
