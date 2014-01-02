@@ -1980,6 +1980,7 @@ sub list {
 
 sub is_remote {
   my $s = shift;
+  $s =~ s/\/$//;
   my $steppath = $idx->{$s . "path"};
   $steppath =~ s/$s//; # remove step name from path
   return abs_path($steppath) ne abs_path($maindir);
