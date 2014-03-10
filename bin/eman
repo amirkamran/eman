@@ -166,6 +166,7 @@ my $showdir = 0; # show directory (alias) for remote steps
 my %qsub_defaults = (
   mem => "6g", # memory requirements
   cores => 1,  # cpu cores
+  time => "01:00:00", # max execution time
 );
 
 # qsub flags we interpret
@@ -179,12 +180,12 @@ my $time = undef; # time limit
 my @limits = ();  # other custom limits
 my @userholds = (); # SGE jobids to wait for
 # the 'environment' used to interpret qsub flags
-my $env = "ufal"; # SGE environment (used for option mapping)
+# my $env = "ufal"; # SGE environment (used for option mapping)
 my $hostname = `hostname`;
 my $anonymize = 0; # anonymize traceback
-if ($hostname =~ /^cluster-cn-/i) {
-  $env = "rwth";
-}
+#if ($hostname =~ /^cluster-cn-/i) {
+#  $env = "rwth";
+#}
 my $subdir = "."; # the directory where to create the experiments
 
 my %options = (
@@ -317,7 +318,7 @@ if ($list_options) {
 my $lock = undef;
 
 # all subdirs need to be known before helper commands
-guess_maindir();
+# guess_maindir(); # chdir_to_maindir is calling guess_maindir
 my $oldwd = chdir_to_maindir();
 my $autoreadonly = ( !$reindex && $cmd =~ /^(traceback|graph|vars|succeed|fail|status)$/ );
 $autoreadonly = 1 if defined $ENV{"EMAN_READONLY"};
@@ -1748,16 +1749,21 @@ sub submit {
     if ($qsub_available) {
       # check whether it is SGE qsub or PBS qsub
       my $sgeversion = `qsub -help nonexistent-file 2>&1 | grep GE 2>/dev/null`;
-      $qsub_available = 0 if $sgeversion !~ /GE/;
+      $sge = 0 if $sgeversion !~ /GE/;
     }
   }
-  if ($sge && !$qsub_available) {
-    print STDERR "Disabling SGE by default, failed to find qsub.\n";
-    $sge = 0;
+  if (!$qsub_available) {
+    print STDERR "Failed to find qsub.\n";
+  } else {
+    if($sge) {
+       print STDERR "SGE qsub available.\n";
+    } else {
+       print STDERR "PBS qsub available.\n";
+    }
   }
 
-  if (! $sge) {
-    # avoid sun grid engine
+  if (! $qsub_available) {
+    # avoid grid engine
     # XXX must wait for running jobs
     my $waitscript = "";
     $waitscript = "$eman --reindex wait @plainholds; "
@@ -1799,56 +1805,86 @@ sub submit {
     # include environment vars
     map { $vars_hash->{$_} = $ENV{$_} } grep { $_ =~ m/^EMAN_/ } keys %ENV;
 
-    my @opts = ("-hard");
-    push @opts, ("-j", "y");
-    push @opts, ("-cwd");
-    push @opts, ("-S", "/bin/bash");
-    push @opts, ("-p", $priority);
-    # interpret SGE options
-    my $real_queue = $queue // $vars_hash->{EMAN_QUEUE};
-    if (defined $real_queue) {
-      push @opts, ("-q", $real_queue);
-    }
-    my $real_exclude_comp = $exclude_comp // $vars_hash->{EMAN_EXCLUDECOMP};
-    if (defined ($real_exclude_comp)) {
-      die "Cannot use --queue and --exclude-comp at the same time"
-        if defined $real_queue;
-      push @opts, ("-q", "*@*&!$real_exclude_comp");
-    }
-    my $real_time = $time // $vars_hash->{EMAN_TIME};
-    if (defined $real_time) {
-      push @opts, ('-l', "h_rt=".$real_time);
-    }
-    my $real_mem = $mem // $vars_hash->{EMAN_MEM} // $qsub_defaults{mem};
-    if (defined $real_mem && $real_mem ne "") {
-      if ($env eq "rwth") {
-        push @opts, ('-l', "h_vmem=".$real_mem);
-      } else {
-        # UFAL setup
-        push @opts, ('-hard', '-l', "mf=".$real_mem);
-        push @opts, ('-hard', '-l', "h_vmem=".$real_mem);
+    my @opts = ();
+
+    if($sge) {
+      push @opts, ("-hard");
+      push @opts, ("-j", "y");
+      push @opts, ("-cwd");
+      push @opts, ("-S", "/bin/bash");
+      push @opts, ("-p", $priority);
+      # interpret SGE options
+      my $real_queue = $queue // $vars_hash->{EMAN_QUEUE};
+      if (defined $real_queue) {
+        push @opts, ("-q", $real_queue);
       }
-    }
-    my $real_disk = $disk // $vars_hash->{EMAN_DISK};
-    if (defined $real_disk) {
-      if ($env eq "rwth") {
-        die "Unsupported --disk at rwth.";
-      } else {
-        # UFAL setup
-        push @opts, ('-l', "mnthf=".$real_disk);
+      my $real_exclude_comp = $exclude_comp // $vars_hash->{EMAN_EXCLUDECOMP};
+      if (defined ($real_exclude_comp)) {
+        die "Cannot use --queue and --exclude-comp at the same time"
+          if defined $real_queue;
+        push @opts, ("-q", "*@*&!$real_exclude_comp");
       }
-    }
-    # add all other directives --limit
-    push @opts, map {('-l', $_)} @limits;
-    # add all job holds
-    push @opts, map {('-hold_jid', $_)} @userholds;
+      my $real_time = $time // $vars_hash->{EMAN_TIME} // $qsub_defaults{time};
+      if (defined $real_time) {
+        push @opts, ('-l', "h_rt=".$real_time);
+      }
+      my $real_mem = $mem // $vars_hash->{EMAN_MEM} // $qsub_defaults{mem};
+      if (defined $real_mem && $real_mem ne "") {
+          push @opts, ('-hard', '-l', "mf=".$real_mem);
+          push @opts, ('-hard', '-l', "h_vmem=".$real_mem);
+      }
+      my $real_disk = $disk // $vars_hash->{EMAN_DISK};
+      if (defined $real_disk) {
+          push @opts, ('-l', "mnthf=".$real_disk);
+      }
+      # add all other directives --limit
+      push @opts, map {('-l', $_)} @limits;
+      # add all job holds
+      push @opts, map {('-hold_jid', $_)} @userholds;
+
+      #check for multi-core support
+      my $real_cores = $cores // $vars_hash->{EMAN_CORES} // $qsub_defaults{cores};
+      if ((defined $real_cores) && ($real_cores!=1)) {
+          push @opts, (" -pe smp $real_cores ");
+      }
+    } else { # PBS
+
+      push @opts, ("-j", "oe");
+      push @opts, ("-w", cwd());
+      push @opts, ("-d", cwd());
+      push @opts, ("-S", "/bin/bash");
+      push @opts, ("-p", $priority);
+      # interpret SGE options
+      my $real_queue = $queue // $vars_hash->{EMAN_QUEUE};
+      if (defined $real_queue) {
+        push @opts, ("-q", $real_queue);
+      }
+      #my $real_exclude_comp = $exclude_comp // $vars_hash->{EMAN_EXCLUDECOMP};
+      #if (defined ($real_exclude_comp)) {
+      #  die "Cannot use --queue and --exclude-comp at the same time"
+      #    if defined $real_queue;
+      #  push @opts, ("-q", "*@*&!$real_exclude_comp");
+      #}
+      my $real_time = $time // $vars_hash->{EMAN_TIME} // $qsub_defaults{time};
+      if (defined $real_time) {
+        push @opts, ('-l', "walltime=".$real_time);
+      }
+      my $real_mem = $mem // $vars_hash->{EMAN_MEM} // $qsub_defaults{mem};
+      if (defined $real_mem && $real_mem ne "") {
+        push @opts, ('-l', "mem=".$real_mem);
+      }
+      # add all other directives --limit
+      push @opts, map {('-l', $_)} @limits;
+      # add all job holds
+      push @opts, map {('-W depend=afterok:', $_)} @userholds;
 
 
 
-    #check for multi-core support
-    my $real_cores = $cores // $vars_hash->{EMAN_CORES} // $qsub_defaults{cores};
-    if ((defined $real_cores) && ($real_cores!=1)) {
-        push @opts, (" -pe smp $real_cores ");
+      #check for multi-core support
+      my $real_cores = $cores // $vars_hash->{EMAN_CORES} // $qsub_defaults{cores};
+      if ((defined $real_cores) && ($real_cores!=1)) {
+          push @opts, (" -pe smp $real_cores ");
+      }
     }
 
     save("eman.status", "RUNNING"); # set status before starting to avoid race
@@ -1857,10 +1893,11 @@ sub submit {
     my $jobname = shorten_name($s);
 
 
-    my $qsub_command = "qsub -C '' $sgeholdsstr -N $jobname -o log.o\\\$JOB_ID @opts ./eman.command";
+    my $qsub_command = "qsub -C '' $sgeholdsstr -N $jobname -o log.o\\\$PBS_JOBID @opts ./eman.command";
     open(LOG, '>log') or die("Cannot write log: $!");
     print LOG ("$qsub_command\n");
     close(LOG);
+
     $ok = safesystem("( $qsub_command 2>&1 ) >> log");
     if ($ok) {
       # get job id
@@ -1869,7 +1906,7 @@ sub submit {
       while(<$hdl>) {
         $nl++;
         last if $nl > 10;
-        if (/Your job ([0-9]+) .*has been submitted/) {
+        if (/([0-9]+).*\.nl/) {
           $jid = $1;
           last;
         }
@@ -2433,6 +2470,7 @@ sub load_depsarr {
 
 sub load_vars_str {
   my $step = shift;
+  $step = guess_step($step);
   return try_load(absolutize_within_stepdir($step, "eman.vars"));
 }
 sub load_vars_hash {
@@ -2626,7 +2664,6 @@ sub guess_step {
   }
   # only recommend --reindex if not already specified
   my $try_reindex = $reindex ? "" : "\nTry --reindex.";
-
   confess "Failed to guess step from: $key$try_reindex" if !defined $step;
   return $step;
 }
